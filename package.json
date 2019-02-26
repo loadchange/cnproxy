@@ -1,0 +1,50 @@
+{
+  "name": "cnproxy",
+  "author": "LoadChange <soocto@gmail.com>",
+  "version": "4.0.0",
+  "description": "CNProxy是一个CLI代理工具",
+  "dependencies": {
+    "agentkeepalive": "^2.1.1",
+    "colors": "^1.2.1",
+    "commander": "^2.15.1",
+    "connect": "^2.9.1",
+    "lodash": "^4.17.5",
+    "mime": "^2.3.1",
+    "mkdirp": "^0.5.1",
+    "node-forge": "^0.7.5",
+    "step": "^1.0.0",
+    "tunnel-agent": "^0.6.0",
+    "mocha": "5.1.1",
+    "should": "13.2.1",
+    "babel-runtime": "^6.26.0"
+  },
+  "devDependencies": {
+    "babel": "^6.23.0",
+    "babel-cli": "^6.26.0",
+    "babel-core": "^6.26.0",
+    "babel-plugin-transform-async-to-generator": "^6.24.1",
+    "babel-plugin-transform-runtime": "^6.23.0",
+    "babel-polyfill": "^6.26.0",
+    "babel-preset-es2015": "^6.24.1",
+    "babel-register": "^6.26.0"
+  },
+  "main": "./lib/cnproxy",
+  "bin": {
+    "cnproxy": "./bin/cnproxy"
+  },
+  "scripts": {
+    "test": "make test",
+    "build": "babel -w src -d lib"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LoadChange/cnproxy.git"
+  },
+  "keywords": [
+    "node.js",
+    "web",
+    "proxy",
+    "fiddler"
+  ],
+  "license": "MIT"
+}

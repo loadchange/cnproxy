@@ -1,0 +1,24 @@
+#!/usr/bin/env node
+
+var program = require('commander');
+var cnproxy = require('../');
+var conf = require('../package.json');
+
+program
+    .version(conf.version)
+    .option('-c, --config [config]', 'Configuration file')
+    .option('-p, --port [port]', 'Specify the port CNProxy will listen on(9010 by default)', parseInt)
+    .option('-t, --timeout [timeout]', 'Specify the request timeout(5 seconds by default)', parseInt)
+    .option('-d, --debug [debug]', 'Enable debug mode')
+    .option('-n, --networks [networks]', 'Display network interface list')
+    .option('-w, --watch [watch]', 'Observe the single rule and mutex with the configuration file.')
+    .parse(process.argv);
+
+cnproxy({
+    "port":program.port,
+    "config": program.config,
+    "timeout": program.timeout,
+    "debug": !!program.debug,
+    "networks": program.networks,
+    "watch": program.watch,
+});
