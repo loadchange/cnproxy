@@ -1,7 +1,7 @@
 {
   "name": "cnproxy",
   "author": "LoadChange <soocto@gmail.com>",
-  "version": "4.0.0",
+  "version": "4.0.1",
   "description": "CNProxy是一个CLI代理工具",
   "dependencies": {
     "agentkeepalive": "^2.1.1",

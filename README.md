@@ -33,7 +33,7 @@ CNProxy是一个CLI代理工具
 
 ## 安装证书
     
-    设置好代理后，访问 http://loadchange.com/getssl 安装证书
+    设置好代理后，访问 http://yanfu.vip/getssl 安装证书
     
     IOS 11后的手机，安装好证书后还需要在 设置->通用->关于本机->证书信任设置-> 找到 CNProxy CA 将其打开
 
