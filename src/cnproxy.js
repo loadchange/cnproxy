@@ -132,7 +132,7 @@ function cnproxy({port, config, timeout, debug, networks, watch}) {
         server.on('request', (req, res) => {
             log.debug(req.url)
             let ssl = false;
-            if (req.url === 'http://loadchange.com/getssl') {
+            if (req.url === 'http://yanfu.vip/getssl') {
                 try {
                     let fileString = fs.readFileSync(caCertPath);
                     res.setHeader('Content-Type', 'application/x-x509-ca-cert')
