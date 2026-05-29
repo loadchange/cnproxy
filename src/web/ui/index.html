@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>cnproxy — traffic inspector</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header class="toolbar">
+      <div class="brand"><span class="logo">⚡</span> cnproxy</div>
+      <div class="status" id="status">connecting…</div>
+      <input id="filter" class="filter" placeholder="filter: ~m POST &amp; ~u /api  |  example.com" spellcheck="false" />
+      <div class="spacer"></div>
+      <label class="toggle"><input type="checkbox" id="decrypt" /> decrypt HTTPS</label>
+      <button id="rulesBtn" class="btn">Rules</button>
+      <button id="interceptBtn" class="btn">Intercept</button>
+      <button id="clearBtn" class="btn">Clear</button>
+      <a class="btn" href="/api/export/har" download>Export HAR</a>
+      <a class="btn" href="/ca.crt" download>CA cert</a>
+    </header>
+
+    <main class="layout">
+      <section class="list-pane">
+        <table class="flow-table">
+          <thead>
+            <tr>
+              <th class="c-status">#</th>
+              <th class="c-method">Method</th>
+              <th class="c-host">Host</th>
+              <th class="c-path">Path</th>
+              <th class="c-type">Type</th>
+              <th class="c-size">Size</th>
+              <th class="c-time">Time</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </section>
+
+      <section class="detail-pane" id="detail">
+        <div class="empty">Select a request to inspect it.</div>
+      </section>
+    </main>
+
+    <!-- Rules editor drawer -->
+    <div class="drawer" id="rulesDrawer" hidden>
+      <div class="drawer-head">
+        <strong>Rules</strong>
+        <span class="hint">one per line — <code>pattern operator://value</code></span>
+        <div class="spacer"></div>
+        <button id="rulesSave" class="btn primary">Apply</button>
+        <button id="rulesClose" class="btn">Close</button>
+      </div>
+      <textarea id="rulesText" class="code" spellcheck="false" placeholder="# examples (quote filter patterns that contain spaces)
+example.com host://127.0.0.1
+/api/user mock://{&quot;id&quot;:1,&quot;name&quot;:&quot;mock&quot;}
+*.ads.com block://
+&quot;~u jquery&quot; resReplace://s/console.log/void 0/
+api.example.com reqHeaders://{&quot;x-debug&quot;:&quot;1&quot;}"></textarea>
+    </div>
+
+    <!-- Intercept drawer -->
+    <div class="drawer small" id="interceptDrawer" hidden>
+      <div class="drawer-head">
+        <strong>Intercept filter</strong>
+        <span class="hint">flows matching pause for resume/kill. Empty = off.</span>
+        <div class="spacer"></div>
+        <button id="interceptSave" class="btn primary">Apply</button>
+        <button id="interceptClose" class="btn">Close</button>
+      </div>
+      <input id="interceptText" class="code" placeholder="~m POST &amp; ~u /checkout" />
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

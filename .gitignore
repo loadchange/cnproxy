@@ -1,6 +1,12 @@
 node_modules/
+dist/
 *.log
-*.DS_Store
+.DS_Store
+.cnproxy/
+bun.lock
+bun.lockb
+*.saz
+*.cnp
 
-.idea/
-npm-debug.log*
+# session recovery artifacts
+*-command-name*.txt

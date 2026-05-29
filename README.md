@@ -1,160 +1,246 @@
-# CNProxy
+# cnproxy
 
-CNProxy是一个CLI代理工具
+> A modern HTTP / HTTPS / WebSocket debugging & MITM proxy for developers — built on [Bun](https://bun.sh) + TypeScript.
 
-## 为什么选择CNProxy
+Capture, inspect, rewrite and mock network traffic with a live web inspector. cnproxy
+takes the proven ideas of [whistle](https://github.com/avwo/whistle) and
+[mitmproxy](https://github.com/mitmproxy/mitmproxy) (on-the-fly TLS interception, a flow
+model, a rule engine, an addon/hook system, a filter language) and packages them into a
+single fast, dependency-light Bun binary with a clean inspector UI inspired by
+[Reqable](https://reqable.com).
 
-* 支持Mac、Linux和Windows(尤其是Linux和Mac)
-* 支持更换组合文件与源文件分开
-* 支持目录映射
+```
+┌──────────┐   HTTP/HTTPS/WS    ┌───────────────────────────┐      ┌──────────┐
+│  client  │ ─────────────────▶ │          cnproxy          │ ───▶ │  origin  │
+│ (browser,│   set HTTP(S)_PROXY│  • TLS MITM (auto certs)  │      │  server  │
+│  app, …) │ ◀───────────────── │  • flow capture + rules   │ ◀─── │          │
+└──────────┘                    │  • live web inspector     │      └──────────┘
+                                └───────────────────────────┘
+                                          ▲ ws stream
+                                  ┌───────┴────────┐
+                                  │  web inspector │  http://127.0.0.1:8889
+                                  └────────────────┘
+```
 
-这是要使用CNProxy的主要原因。此外,CNProxy可以提高日常开发企业级产品的效率与一堆复杂的构建过程。
+## Features
 
-## 产品特点
+- **Full MITM** of HTTP, HTTPS, WebSocket and secure WebSocket (wss), with an
+  automatically generated root CA and per-host certificates minted on demand (SNI).
+- **Live web inspector** — real-time flow list, request/response headers & bodies, JSON
+  pretty-printing, image preview, WebSocket message timeline (streamed over a WebSocket).
+- **Transparent decompression** — `gzip`, `br` and `deflate` responses are captured
+  **decoded**, so the inspector, body filters (`~b`/`~bs`) and `resReplace` all operate on
+  real text. Untouched flows are relayed byte-for-byte; rewritten ones are re-sent decoded.
+- **Streaming relay** — Server-Sent Events, chunked and large (>1 MB) responses are forwarded
+  incrementally (not buffered), with a bounded copy teed into the inspector.
+- **Rule engine** (whistle-style) — redirect hosts, rewrite URLs, mock responses, inject
+  headers, replace body text, map local files, block, delay, and more.
+- **Filter language** (mitmproxy-style) — `~u`, `~m`, `~h`, `~c`, `&`, `|`, `!`, grouping.
+- **Breakpoints / interception** — pause matching flows and resume, kill, or **edit** the
+  request/response before it continues.
+- **Replay** any captured request with one click.
+- **HAR 1.2 export** — download a captured session and open it in Chrome DevTools, Charles,
+  Reqable, … (toolbar **Export HAR** or `GET /api/export/har`).
+- **Addon/hook API** — extend the proxy programmatically (`requestheaders`, `request`,
+  `response`, `websocketMessage`, …).
+- **Upstream proxy chaining**, allow/ignore host lists, body-size caps.
+- **Zero build step** — runs straight from TypeScript on Bun.
 
-* 支持Mac、Linux和Windows
-* 同时支持单文件和组合文件
-* 支持目录映射与任何文件
-* 同时支持HTTP和HTTPS
+## Install
 
-## 安装说明
+Requires [Bun](https://bun.sh) ≥ 1.1.
 
-    npm install -g cnproxy
+```bash
+# global
+bun add -g cnproxy
+cnproxy --help
 
-如果你不熟悉Node.JS和NPM,你可以访问 [NPM包管理器介绍](http://www.runoob.com/nodejs/nodejs-npm.html)
+# or run from a clone
+bun install
+bun run bin/cnproxy.ts
+```
 
-## 使用方法
+## Quick start
 
-    cnproxy -c config.sample.js
+```bash
+cnproxy                       # proxy on :8888, inspector on http://127.0.0.1:8889
+```
 
-    设置浏览器的代理127.0.0.1:(默认端口9010)
+1. Point your client at the proxy: `export HTTP_PROXY=http://127.0.0.1:8888 HTTPS_PROXY=http://127.0.0.1:8888`
+   (or set it in your OS/browser network settings).
+2. To decrypt HTTPS, trust the root CA once:
+   - open <http://127.0.0.1:8889/ca.crt> while running, or `cnproxy ca --export ~/cnproxy-ca.crt`
+   - add it to your system / browser trust store.
+3. Open the inspector at <http://127.0.0.1:8889> and watch traffic flow in.
 
-如果你不知道如何设置浏览器代理,请阅读这篇文章: [如何设置浏览器代理](http://jingyan.baidu.com/article/fedf0737761a2935ac8977d9.html)
+### CLI
 
-## 安装证书
-    
-    设置好代理后，访问 http://yanfu.vip/getssl 安装证书
-    
-    IOS 11后的手机，安装好证书后还需要在 设置->通用->关于本机->证书信任设置-> 找到 CNProxy CA 将其打开
+```
+cnproxy [start] [options]      Start proxy + web inspector
+cnproxy ca [--export <file>]   Show or export the root CA certificate
 
-    mac 安装
+  -p, --port <n>        Proxy listen port            (default 8888)
+  -w, --web-port <n>    Web inspector port           (default 8889)
+      --host <addr>     Listen address               (default 127.0.0.1)
+      --no-decrypt      Tunnel HTTPS without MITM decryption
+  -u, --upstream <url>  Chain through an upstream proxy (http://host:port)
+      --rules <file>    Load a rule file
+      --ignore <hosts>  Comma-separated hosts to never decrypt
+      --allow <hosts>   Comma-separated allow-list of hosts to decrypt
+      --no-web          Do not start the web inspector
+      --open            Open the inspector in your browser
+  -q, --quiet           Errors only
+  -v, --verbose         Debug logging
+```
 
-     sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain ~/.cnproxy/cnproxy.ca.crt
+## Rules
 
+One rule per line: `pattern operator://value`. Comments start with `#`.
 
-### 选项介绍:
+**Patterns** — how a rule matches a flow:
 
-    使用: cnproxy [选项]
+| Pattern              | Matches                                                        |
+| -------------------- | ------------------------------------------------------------- |
+| `example.com`        | the host `example.com` and any subdomain                      |
+| `*.cdn.example.com`  | glob against the host                                         |
+| `^https?://.*\.js$`  | regex against the full URL (leading `^`)                      |
+| `/api/users`         | substring against the full URL (contains a `/`)               |
+| `"~m POST & ~u /pay"`| a full **filter expression** (quote it if it contains spaces) |
 
-    选项:
+**Operators**:
 
-      -h, --help                显示cnproxy帮助信息
-      -V, --version             显示当前cnproxy版本号
-      -w, --watch [watch]       指定需要观察的URL
-      -c, --config [config]     指定代理所需的配置文件
-      -p, --port [port]         自定义代理端口号(默认端口:9010)
-      -t, --timeout [timeout]   设置超时时间 (默认:5秒)
-      -n, --networks [networks] 显示本机网络信息
+| Operator            | Phase   | Effect                                                  |
+| ------------------- | ------- | ------------------------------------------------------- |
+| `host://ip[:port]`  | request | redirect the connection to another host/port           |
+| `rewrite://<url>`   | request | rewrite scheme/host/path (bare `http(s)://…` works too) |
+| `redirect://<url>`  | request | reply 302 to `<url>`                                     |
+| `mock://<value>`    | request | synthesize a 200 response (`{json}`, text, or `file://…`)|
+| `file://<path>`     | request | serve a local file as the response                      |
+| `status://<code>`   | both    | force a status code                                     |
+| `reqHeaders://…`    | request | set/delete request headers (`{json}` or `k: v` lines)   |
+| `resHeaders://…`    | response| set/delete response headers                             |
+| `reqType://<mime>` / `resType://<mime>` | — | set content-type                          |
+| `ua://<string>` / `referer://<url>` | request | set User-Agent / Referer                    |
+| `reqReplace://s/a/b/` | request | string-replace in the request body                    |
+| `resReplace://s/a/b/` | response| string-replace in the response body                   |
+| `delay://<ms>`      | request | add latency                                             |
+| `block://`          | request | abort the connection                                    |
 
-## 代理模板规则文件(请使用一个.js文件)
+Example rule file (`examples/rules.cnp`):
 
-    module.exports = {
-        middlewares: [
-            // 1. 与当地一个取代单一文件
-            {
-                pattern: 'homepage.js',      // 你想替换匹配url
-                responder: "/Users/wangyanmin/code/github/cnproxy/start.js"
-            },
-    
-            // 2. 用web文件替换单一文件
-            {
-                pattern: 'myvue.js',      // 你想替换匹配url
-                responder: "https://cdn.bootcss.com/vue/2.5.16/vue.js"
-            },
-    
-            // 3. 组合文件替换为src与绝对的文件路径
-            {
-                pattern: 'group/test.*.js',
-                responder: [
-                    '/Users/wangyanmin/code/other/test/a.js',
-                    '/Users/wangyanmin/code/other/test/b.js',
-                    '/Users/wangyanmin/code/other/test/c.js'
-                ]
-            },
-    
-            // 4. 组合文件替换为src相对文件路径和指定的dir
-            {
-                pattern: 'group/test.*.js',
-                responder: {
-                    dir: '/Users/wangyanmin/code/other/test',
-                    src: [
-                        'a.js',
-                        'b.js',
-                        'c.js'
-                    ]
-                }
-            },
-    
-            // 5. 请求服务器的图片目录映射到本地图片目录
-            {
-                pattern: 'ui/homepage/img',  // 必须是一个字符串
-                responder: '/Users/wangyanmin/Downloads/test_img' // 必须是一个绝对目录路径
-            },
-    
-            // 6. 使用正则表达式
-            {
-                pattern: /https?:\/\/[\w\.]*(?::\d+)?\/ui\/(.*)_dev\.(\w+)/,
-                responder: 'http://localhost/proxy/$1.$2'
-            },
-    
-            // 7. 服务器映像目录映射到本地图像目录与正则表达式
-            // 这个简单的规则可以替代多个目录相应的环境
-            // 如下：
-            //   http://host:port/ui/a/img/... => /home/a/image/...
-            //   http://host:port/ui/b/img/... => /home/b/image/...
-            //   http://host:port/ui/c/img/... => /home/c/image/...
-            //   ...
-            {
-                pattern: /ui\/(.*)\/img\//,
-                responder: '/Users/wangyanmin/Downloads/test_img/$1/img/'
-            },
-            // 8. 使用cookies ,单独设置某一个匹配规则的cookies，
-            // 如果需要将全部匹配的url统一设置cookies
-            // 可以在启动cnproxy时使用-c 'cookies...'
-            {
-                pattern: /http:\/\/127.0.0.1:8080\/user\/upload\/(.*)$/,
-                responder: 'http://www.qq.com/vip/upload/$1',
-                cookies: '_xsrf=2|330a5789|c9627c4a257a5b6067094df2d9a1e1d8|1459947169; SESSION=e8eb5e4b-2ebc-413a-9055-e5b69471146d'
-            }
-        ],
-    
-        // 外部代理
-        externalProxy: null,
-    
-        // 是否需要走代理
-        sslConnectInterceptor: function (clientReq, clientSocket, head) {
-            return true
-        },
-    
-        // 请求拦截器
-        requestInterceptor: function (rOptions, req, res, ssl, next) {
-            console.log('请求拦截器:requestInterceptor')
-            console.log(`正在访问：${rOptions.protocol}//${rOptions.hostname}:${rOptions.port}`);
-            console.log('cookie:', rOptions.headers.cookie);
-            // res.end('HELLO CNPROXY!');
-            next();
-        },
-    
-        // 响应拦截
-        responseInterceptor: function (req, res, proxyReq, proxyRes, ssl, next) {
-            console.log('responseInterceptor')
-            next();
-        }
-    }
+```
+# redirect a CDN to a local dev server
+*.cdn.example.com host://127.0.0.1:3000
 
+# mock an API endpoint
+/api/profile mock://{"id":1,"name":"Mock User"}
 
-您可以使用这份模板 [代理模板文件](https://github.com/LoadChange/cnproxy/blob/master/config.sample.js) 文件替换成自己的配置。
+# inject a debug header on all API calls
+api.example.com reqHeaders://{"x-debug":"1"}
 
-## 开源许可证
+# kill tracking
+"~u google-analytics" block://
 
-CNProxy 使用 MIT 许可
+# strip console.log from a vendored script
+"~u vendor.js" resReplace://s/console.log/void 0/
+```
+
+## Filter language
+
+Used for the inspector filter box, the `intercept` breakpoint, and `~…` rule patterns:
+
+```
+~u REGEX   url            ~d REGEX   host/domain     ~m REGEX   method
+~c CODE    status (prefix)~t REGEX   content-type    ~a         asset
+~h REGEX   any header     ~hq / ~hs  req/res header  ~b REGEX   any body
+~bq / ~bs  req/res body   ~s  has response           ~e  has error
+~marked    marked         ~websocket / ~http         flow type
+!  not     &  and         |  or       ( … )  grouping (whitespace = and)
+```
+
+e.g. `~m POST & ~u /checkout & !~c 200`
+
+## Programmatic API
+
+```ts
+import { ProxyServer, WebInspector } from "cnproxy";
+
+const proxy = new ProxyServer({ port: 8888, rules: `/api/ping mock://{"pong":true}` });
+
+// an addon: lifecycle hooks (any subset)
+proxy.use({
+  name: "logger",
+  request(flow) {
+    flow.request.headers.set("x-traced-by", "cnproxy");
+  },
+  response(flow) {
+    console.log(flow.request.method, flow.request.url, "→", flow.response?.statusCode);
+  },
+  websocketMessage(flow, msg) {
+    console.log("ws", msg.fromClient ? "▲" : "▼", msg.content.toString().slice(0, 80));
+  },
+});
+
+await proxy.start();
+new WebInspector(proxy).start();
+```
+
+## Architecture
+
+```
+src/
+  cert/ca.ts            root CA + per-host leaf certs (node-forge, LRU, SNI)
+  core/
+    proxy.ts            orchestrator: raw net front, TLS terminator, internal http server
+    head-parser.ts      peek/parse the request head off a raw socket
+    request-handler.ts  flow pipeline: hooks → rules → intercept → upstream/mock → relay
+    websocket.ts        raw ws/wss relay with frame capture
+    upstream.ts         outbound request (direct or via upstream proxy)
+    ws-frame.ts         incremental RFC 6455 frame parser (capture only)
+  flow/                 Flow / Request / Response model + Headers + FlowStore (event bus)
+  rules/                rule engine (engine.ts) + filter language (filter.ts)
+  addons/               addon manager + hook contract
+  web/                  Bun.serve inspector (server.ts) + single-page UI (ui/)
+  options.ts            reactive, typed options
+bin/cnproxy.ts          CLI
+```
+
+The proxy front is a raw `net.Server`: every connection is *peeked* (its request head is
+parsed without being consumed) and then routed — `CONNECT` to a TLS terminator that mints a
+host cert via SNI, `Upgrade: websocket` to a raw relay, and everything else bridged into an
+internal `http.Server` that runs the flow pipeline. This low-level approach (rather than
+node:http's `connect`/`upgrade` events) is what lets the same code intercept HTTP, HTTPS,
+ws and wss uniformly and reliably on Bun.
+
+## Development
+
+```bash
+bun install
+bun run dev          # watch mode
+bun run typecheck    # tsc --noEmit
+bun test             # full functional suite (rules, filter, encoding, streaming,
+                     #   web API, HAR, intercept, passthrough, e2e, websocket)
+```
+
+## Web API
+
+The inspector also exposes a small REST control plane (served on the web port):
+
+| Method & path                  | Purpose                                              |
+| ------------------------------ | ---------------------------------------------------- |
+| `GET  /api/flows`              | flow summaries                                       |
+| `GET  /api/flows/:id`          | full flow detail (headers + base64 bodies)           |
+| `POST /api/flows/:id/resume`   | resume a paused (intercepted) flow                   |
+| `POST /api/flows/:id/kill`     | drop a paused flow's connection                      |
+| `POST /api/flows/:id/edit`     | edit a paused flow's request/response before resume  |
+| `POST /api/flows/:id/replay`   | re-issue the request as a new flow                   |
+| `POST /api/flows/:id/mark`     | toggle the mark flag                                 |
+| `GET/POST /api/options`        | read / patch runtime options (rules, intercept, …)   |
+| `GET  /api/stats`              | totals (flows, rules, intercept state)               |
+| `GET  /api/export/har`         | download the session as HAR 1.2                      |
+| `POST /api/clear`              | empty the flow store                                 |
+| `GET  /ca.crt`                 | download the root CA certificate                     |
+
+## License
+
+MIT © LoadChange
