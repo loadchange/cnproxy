@@ -32,6 +32,7 @@ import { handleRequest, replayFlow } from "./request-handler.ts";
 import { handleH2Stream } from "./h2-handler.ts";
 import { relayWebSocket } from "./websocket.ts";
 import { peekRequestHead } from "./head-parser.ts";
+import { negotiateSocks } from "./socks.ts";
 import { log } from "../logger.ts";
 
 interface ConnMeta {
@@ -157,13 +158,10 @@ export class ProxyServer {
     await listen(this.tlsServer as unknown as http.Server, 0, "127.0.0.1");
     this.tlsPort = (this.tlsServer.address() as { port: number }).port;
 
-    // Public raw front.
+    // Public raw front — peek the first byte to tell SOCKS (0x05/0x04) from HTTP.
     this.frontServer = net.createServer((sock) => {
       sock.on("error", () => sock.destroy());
-      void this.route(sock as unknown as Duplex, "http", undefined, {
-        address: sock.remoteAddress ?? "",
-        port: sock.remotePort ?? 0,
-      });
+      void this.handleFront(sock);
     });
     await listen(this.frontServer as unknown as http.Server, this.options.get("port"), this.options.get("host"));
 
@@ -190,13 +188,60 @@ export class ProxyServer {
 
   // ---- routing ----
 
+  /** Front-line dispatch: SOCKS clients (first byte 0x05/0x04) are negotiated, else HTTP. */
+  private async handleFront(socket: Socket): Promise<void> {
+    const remote = { address: socket.remoteAddress ?? "", port: socket.remotePort ?? 0 };
+    const first = await readChunk(socket);
+    if (!first) {
+      socket.destroy();
+      return;
+    }
+    if (first[0] === 0x05 || first[0] === 0x04) {
+      const result = await negotiateSocks(socket, first);
+      if (!result) {
+        socket.destroy();
+        return;
+      }
+      await this.afterSocks(socket, result.target, remote, result.leftover);
+      return;
+    }
+    void this.route(socket as unknown as Duplex, "http", undefined, remote, first);
+  }
+
+  /** After a SOCKS tunnel is established, detect TLS vs plaintext and route accordingly. */
+  private async afterSocks(
+    socket: Socket,
+    target: { host: string; port: number },
+    remote: { address: string; port: number },
+    leftover: Buffer,
+  ): Promise<void> {
+    let lead = leftover;
+    if (!lead.length) {
+      const c = await readChunk(socket);
+      if (!c) {
+        socket.destroy();
+        return;
+      }
+      lead = c;
+    }
+    if (lead[0] === 0x16) {
+      // TLS ClientHello — MITM-decrypt or blind-tunnel like a CONNECT.
+      if (this.shouldDecrypt(target.host)) this.bridgeToTls(socket, target, lead);
+      else this.blindTunnel(socket, lead, target.host, target.port);
+    } else {
+      // Plaintext (HTTP) over the tunnel — the request's Host header carries the target.
+      void this.route(socket as unknown as Duplex, "http", undefined, remote, lead);
+    }
+  }
+
   private async route(
     socket: Duplex,
     scheme: "http" | "https",
     mitmTarget: { host: string; port: number } | undefined,
     remote: { address: string; port: number },
+    initial: Buffer = Buffer.alloc(0),
   ): Promise<void> {
-    const head = await peekRequestHead(socket);
+    const head = await peekRequestHead(socket, initial);
     if (!head) {
       socket.destroy();
       return;
@@ -240,10 +285,13 @@ export class ProxyServer {
       this.blindTunnel(clientSocket, rest, host, port);
       return;
     }
+    this.bridgeToTls(clientSocket, { host, port }, rest);
+  }
 
-    // Bridge into the TLS terminator; record the origin by the bridge's source port.
+  /** Pipe a client socket into the internal TLS terminator (MITM), recording its origin target. */
+  private bridgeToTls(clientSocket: Socket, target: { host: string; port: number }, rest: Buffer): void {
     const bridge = net.connect(this.tlsPort, "127.0.0.1", () => {
-      this.connMeta.set(bridge.localPort ?? 0, { scheme: "https", target: { host, port } });
+      this.connMeta.set(bridge.localPort ?? 0, { scheme: "https", target });
       if (rest.length) bridge.write(rest);
       clientSocket.pipe(bridge);
       bridge.pipe(clientSocket);
@@ -278,6 +326,23 @@ export class ProxyServer {
     if (allow.length && !allow.some((p) => matchHost(p, host))) return false;
     return true;
   }
+}
+
+/** Read the next data chunk from a socket (the bytes are consumed, to be threaded forward). */
+function readChunk(socket: Socket): Promise<Buffer | null> {
+  return new Promise((resolve) => {
+    const onData = (d: Buffer) => {
+      socket.off("data", onData);
+      socket.off("end", onEnd);
+      resolve(d);
+    };
+    const onEnd = () => {
+      socket.off("data", onData);
+      resolve(null);
+    };
+    socket.on("data", onData);
+    socket.once("end", onEnd);
+  });
 }
 
 function targetFromHead(head: { target: string; headers: Map<string, string> }, fallbackPort: number): { host: string; port: number } {

@@ -22,31 +22,42 @@ export interface PeekedRequest {
 
 const MAX_HEAD = 64 * 1024;
 
-/** Resolve once the request head is fully buffered. The bytes are pushed back via `rest`. */
-export function peekRequestHead(socket: Duplex): Promise<PeekedRequest | null> {
+/**
+ * Resolve once the request head is fully buffered, seeded with already-read `initial` bytes. The
+ * full head + any trailing bytes are returned via `headBuf`/`rest` (we never rely on unshift).
+ */
+export function peekRequestHead(socket: Duplex, initial: Buffer = Buffer.alloc(0)): Promise<PeekedRequest | null> {
   return new Promise((resolve) => {
-    let buf = Buffer.alloc(0);
-    const onData = (chunk: Buffer) => {
-      buf = Buffer.concat([buf, chunk]);
+    let buf = initial;
+    let settled = false;
+
+    const consider = (): boolean => {
       const idx = buf.indexOf("\r\n\r\n");
       if (idx === -1) {
         if (buf.length > MAX_HEAD) finish(null);
-        return;
+        return false;
       }
-      const headBuf = buf.subarray(0, idx + 4);
-      const rest = buf.subarray(idx + 4);
-      finish(parse(headBuf, rest));
+      finish(parse(buf.subarray(0, idx + 4), buf.subarray(idx + 4)));
+      return true;
+    };
+    const onData = (chunk: Buffer) => {
+      buf = Buffer.concat([buf, chunk]);
+      consider();
     };
     const onEnd = () => finish(null);
     const onErr = () => finish(null);
 
     function finish(result: PeekedRequest | null) {
+      if (settled) return;
+      settled = true;
       socket.removeListener("data", onData);
       socket.removeListener("end", onEnd);
       socket.removeListener("error", onErr);
       resolve(result);
     }
 
+    // The initial bytes may already contain the whole head.
+    if (buf.length && consider()) return;
     socket.on("data", onData);
     socket.on("end", onEnd);
     socket.on("error", onErr);
