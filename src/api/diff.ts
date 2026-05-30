@@ -1,6 +1,6 @@
 /**
  * Flow diff tool — compare two captured flows (request + response, headers + body) and produce a
- * line-level diff, the way Reqable lets you locate deviations between two messages.
+ * line-level diff to locate deviations between two messages.
  */
 import type { Flow } from "../flow/flow.ts";
 

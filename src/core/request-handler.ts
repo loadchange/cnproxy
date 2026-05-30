@@ -2,7 +2,7 @@
  * Unified HTTP request handler for both plain-HTTP proxy requests (absolute-URI) and
  * decrypted HTTPS requests coming off the internal MITM TLS server.
  *
- * Pipeline (mirrors mitmproxy's hook order):
+ * Pipeline:
  *   build flow → collect body → requestheaders → request → rules(request) →
  *   [intercept pause] → [mock | block | upstream] → responseheaders → rules(response) →
  *   response → relay to client.
@@ -151,10 +151,15 @@ export async function handleRequest(
     const clenRaw = res.headers.get("content-length");
     const clen = clenRaw ? parseInt(clenRaw, 10) : NaN;
     const isEventStream = /text\/event-stream/i.test(ctype);
+    const encoding = res.headers.get("content-encoding") ?? "";
     const STREAM_THRESHOLD = 1024 * 1024; // 1 MB
+    // A compressed body must be buffered so we can decode it for capture (real servers send
+    // chunked gzip with no content-length); a response-phase breakpoint also needs the full body.
     const canStream =
       !ctx.rules.hasResponseBodyRule(flow) &&
       !ctx.addons.has("response") &&
+      !isDecodable(encoding) &&
+      !ctx.interceptResponseMatch()(flow) &&
       (isEventStream || !Number.isFinite(clen) || clen > STREAM_THRESHOLD);
 
     if (canStream) {
@@ -166,7 +171,6 @@ export async function handleRequest(
     // Collect the raw (possibly compressed) body, then decode for capture + rule/hook operation.
     const rawBody = await collectBody(upstreamRes);
     res.timestampEnd = ctx.now();
-    const encoding = res.headers.get("content-encoding") ?? "";
     const decoded = isDecodable(encoding) ? decodeBody(rawBody, encoding) : rawBody;
     res.body = decoded;
 
@@ -224,7 +228,7 @@ function boundStored(flow: Flow, max: number): void {
 }
 
 /**
- * Re-issue a previously captured request as a brand-new flow (Reqable-style "replay").
+ * Re-issue a previously captured request as a brand-new flow ("replay").
  * Runs request rules, sends upstream, applies response rules, records, and returns the new flow.
  */
 export async function replayFlow(ctx: ProxyContext, source: Flow): Promise<Flow> {

@@ -1,5 +1,5 @@
 /**
- * API-testing engine — the "Postman half": compose and send arbitrary requests, import/export
+ * API-testing engine — compose and send arbitrary requests, import/export
  * cURL, generate code snippets, substitute environment variables, and manage a cookie jar.
  * Composed requests run the same rule/addon pipeline and are recorded as flows.
  */

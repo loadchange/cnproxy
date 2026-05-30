@@ -1,10 +1,9 @@
 /**
  * Certificate Authority for HTTPS MITM.
  *
- * Distilled from whistle (lib/https/ca.js) and mitmproxy (mitmproxy/certs.py):
- *  - A self-signed root CA is generated once and persisted to disk; users trust it.
+ * A self-signed root CA is generated once and persisted to disk; users trust it.
  *  - One RSA "leaf" key pair is reused for every host (key generation is the expensive
- *    part; reusing it — as mitmproxy does — makes per-host cert minting near-instant).
+ *    part; reusing it makes per-host cert minting near-instant).
  *  - Per-host leaf certificates are signed on demand with the correct SAN entries and
  *    cached as `tls.SecureContext` in an LRU keyed by the (wildcarded) host.
  *  - Leaf validity is kept under the 398-day browser cap.
@@ -46,6 +45,7 @@ export class CertificateAuthority {
   private leafKeys!: forge.pki.rsa.KeyPair;
   private leafKeyPem!: string;
   private contexts = new LRU<string, tls.SecureContext>(1024);
+  private certPemCache = new LRU<string, string>(1024);
   private readonly certDir: string;
 
   constructor(dataDir: string) {
@@ -126,10 +126,20 @@ export class CertificateAuthority {
     return ctx;
   }
 
+  /** Return raw PEM key+cert for a given hostname (cached via wildcard key). */
+  getCredentialsFor(servername: string): { key: string; cert: string } {
+    const wk = wildcardKey(servername);
+    let certPem = this.certPemCache.get(wk);
+    if (!certPem) {
+      certPem = this.mintLeaf(servername, wk);
+      this.certPemCache.set(wk, certPem);
+    }
+    return { key: this.leafKeyPem, cert: certPem + "\n" + pki.certificateToPem(this.caCert) };
+  }
+
   /** Default key/cert PEM pair for TLS connections that arrive without an SNI name. */
   getDefaultCredentials(): { key: string; cert: string } {
-    const certPem = this.mintLeaf("cnproxy.local", "cnproxy.local");
-    return { key: this.leafKeyPem, cert: certPem + "\n" + pki.certificateToPem(this.caCert) };
+    return this.getCredentialsFor("cnproxy.local");
   }
 
   private mintLeaf(servername: string, wildcard: string): string {

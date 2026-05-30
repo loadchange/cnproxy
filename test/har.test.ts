@@ -2,7 +2,7 @@
  * HAR 1.2 export — captured sessions must be exportable to the universal interchange format so
  * users can open them in Chrome DevTools / Charles / Reqable.
  */
-import { test, expect, beforeAll, afterAll } from "bun:test";
+import { test, expect, beforeAll, afterAll } from "vitest";
 import http from "node:http";
 import { ProxyServer, WebInspector } from "../src/index.ts";
 import { setLogLevel } from "../src/logger.ts";

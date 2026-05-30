@@ -1,7 +1,7 @@
 /**
  * HAR import (round-trip with export), batch replay, and per-stage upstream timing.
  */
-import { test, expect, beforeAll, afterAll } from "bun:test";
+import { test, expect, beforeAll, afterAll } from "vitest";
 import http from "node:http";
 import { ProxyServer } from "../src/index.ts";
 import { flowsToHar, harToFlows } from "../src/flow/har.ts";

@@ -56,7 +56,7 @@ function makeReader(socket: Socket, initial: Buffer) {
 /**
  * Negotiate a SOCKS connection over `socket`, seeded with the already-read `initial` bytes.
  * Resolves the CONNECT target plus any payload bytes received past the handshake (`leftover`).
- * (We thread leftovers explicitly rather than `socket.unshift`, which is unreliable on Bun.)
+ * (We thread leftovers explicitly rather than `socket.unshift` for reliable cross-runtime behavior.)
  */
 export async function negotiateSocks(
   socket: Socket,

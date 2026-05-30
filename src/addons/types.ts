@@ -1,7 +1,7 @@
 /**
- * Addon contract — modeled on mitmproxy's addon hooks. Every addon implements any
- * subset of these lifecycle methods. Hooks may be async; the proxy awaits them in order,
- * so an addon can mutate a flow (rewrite, mock, pause) before the proxy proceeds.
+ * Addon contract. Every addon implements any subset of these lifecycle methods.
+ * Hooks may be async; the proxy awaits them in order, so an addon can mutate a flow
+ * (rewrite, mock, pause) before the proxy proceeds.
  */
 
 import type { Flow, WebSocketMessage } from "../flow/flow.ts";

@@ -1,7 +1,6 @@
 /**
- * Flow filter expression language — a TypeScript port of the *concepts* in
- * mitmproxy's flowfilter.py. Compiles a string like `~m POST & ~u /api & !~c 200`
- * into a predicate `(flow) => boolean`.
+ * Flow filter expression language.
+ * Compiles a string like `~m POST & ~u /api & !~c 200` into a predicate `(flow) => boolean`.
  *
  * Supported atoms:
  *   ~u REGEX   url           ~d REGEX   domain/host

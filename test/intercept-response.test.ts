@@ -2,9 +2,10 @@
  * Response-phase breakpoint (edit a response before it reaches the client) and live WebSocket
  * message injection — both Reqable breakpoint capabilities beyond request-only interception.
  */
-import { test, expect, beforeAll, afterAll } from "bun:test";
+import { test, expect, beforeAll, afterAll } from "vitest";
 import http from "node:http";
 import net from "node:net";
+import { WebSocketServer } from "ws";
 import { ProxyServer, WebInspector } from "../src/index.ts";
 import { WsFrameParser } from "../src/core/ws-frame.ts";
 import { setLogLevel } from "../src/logger.ts";
@@ -12,7 +13,8 @@ import { setLogLevel } from "../src/logger.ts";
 setLogLevel("error");
 
 let origin: http.Server;
-let wsOrigin: ReturnType<typeof Bun.serve>;
+let wsHttpServer: http.Server;
+let wsServer: WebSocketServer;
 let originPort = 0;
 let wsPort = 0;
 let proxy: ProxyServer;
@@ -30,15 +32,13 @@ beforeAll(async () => {
   await new Promise<void>((r) => origin.listen(0, "127.0.0.1", r));
   originPort = (origin.address() as any).port;
 
-  wsOrigin = Bun.serve({
-    port: 0,
-    fetch(req, server) {
-      if (server.upgrade(req)) return undefined;
-      return new Response("ok");
-    },
-    websocket: { message(ws, msg) { ws.send("echo:" + msg); } },
+  wsHttpServer = http.createServer((_req, res) => res.end("ok"));
+  wsServer = new WebSocketServer({ server: wsHttpServer });
+  wsServer.on("connection", (ws) => {
+    ws.on("message", (msg) => ws.send("echo:" + msg.toString()));
   });
-  wsPort = wsOrigin.port;
+  await new Promise<void>((r) => wsHttpServer.listen(0, "127.0.0.1", () => r()));
+  wsPort = (wsHttpServer.address() as { port: number }).port;
 
   proxy = new ProxyServer({ port: PROXY_PORT, webPort: WEB_PORT, interceptResponse: "~u /edit-resp" });
   await proxy.start();
@@ -50,7 +50,8 @@ afterAll(async () => {
   web.stop();
   await proxy.stop();
   origin.close();
-  wsOrigin.stop(true);
+  wsServer.close();
+  wsHttpServer.close();
 });
 
 async function waitIntercepted(path: string, ms = 3000) {

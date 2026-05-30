@@ -3,7 +3,7 @@
  * live origin. This is the whistle-parity bar: host, rewrite, redirect, req/resHeaders, ua,
  * referer, reqReplace, resReplace, status, restype, delay, block, mock, file.
  */
-import { test, expect, beforeAll, afterAll } from "bun:test";
+import { test, expect, beforeAll, afterAll } from "vitest";
 import http from "node:http";
 import { writeFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";

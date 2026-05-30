@@ -1,20 +1,30 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "cnproxy-app",
+  "productName": "CNProxy",
   "version": "0.1.0",
   "identifier": "com.loadchange.cnproxy",
   "build": {
-    "frontendDist": "../src"
+    "frontendDist": "../src",
+    "beforeBuildCommand": "",
+    "beforeDevCommand": ""
   },
   "app": {
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "cnproxy-app",
-        "width": 800,
-        "height": 600
+        "title": "CNProxy",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 500
       }
     ],
+    "trayIcon": {
+      "id": "main-tray",
+      "iconPath": "icons/icon.png",
+      "iconAsTemplate": true,
+      "tooltip": "CNProxy"
+    },
     "security": {
       "csp": null
     }
@@ -22,12 +32,41 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "externalBin": ["binaries/cnproxy"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "resources": [],
+    "copyright": "",
+    "category": "DeveloperTool",
+    "shortDescription": "Modern HTTP/HTTPS/WebSocket debugging proxy",
+    "longDescription": "CNProxy is a modern debugging proxy for developers. Capture, inspect, rewrite and mock HTTP/HTTPS/WebSocket traffic with a live web inspector. Inspired by whistle, mitmproxy, and Reqable.",
+    "iOS": {
+      "developmentTeam": "2CGR266XD2"
+    },
+    "macOS": {
+      "entitlements": "gen/apple/CNProxy.entitlements",
+      "exceptionDomain": "",
+      "frameworks": [],
+      "providerShortName": "",
+      "signingIdentity": null
+    },
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": ""
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "",
+      "endpoints": [
+        "https://github.com/LoadChange/cnproxy/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

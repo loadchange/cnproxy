@@ -1,5 +1,5 @@
 /**
- * Reactive options manager — modeled on mitmproxy's OptManager.
+ * Reactive options manager.
  * Typed options with defaults, change subscriptions, and JSON load/dump.
  */
 
@@ -33,7 +33,7 @@ export interface CnProxyOptions {
   intercept: string;
   /** Response-phase intercept filter — matching flows pause before relaying to the client. */
   interceptResponse: string;
-  /** Rule source text (whistle-style), applied to every flow. */
+  /** Rule source text, applied to every flow. */
   rules: string;
   /** Connection timeout (ms) for upstream requests. */
   timeout: number;

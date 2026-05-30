@@ -129,10 +129,15 @@ export async function handleH2Stream(
     const clenRaw = res.headers.get("content-length");
     const clen = clenRaw ? parseInt(clenRaw, 10) : NaN;
     const isEventStream = /text\/event-stream/i.test(ctype);
+    const encoding = res.headers.get("content-encoding") ?? "";
     const STREAM_THRESHOLD = 1024 * 1024; // 1 MB
+    // Compressed bodies are buffered+decoded for capture fidelity; a matching response breakpoint
+    // also needs the full body. (Real servers chunk gzip with no content-length.)
     const canStream =
       !ctx.rules.hasResponseBodyRule(flow) &&
       !ctx.addons.has("response") &&
+      !isDecodable(encoding) &&
+      !ctx.interceptResponseMatch()(flow) &&
       (isEventStream || !Number.isFinite(clen) || clen > STREAM_THRESHOLD);
 
     if (canStream) {
@@ -143,7 +148,6 @@ export async function handleH2Stream(
 
     const rawBody = await collectBody(upstreamRes);
     res.timestampEnd = ctx.now();
-    const encoding = res.headers.get("content-encoding") ?? "";
     const decoded = isDecodable(encoding) ? decodeBody(rawBody, encoding) : rawBody;
     res.body = decoded;
 

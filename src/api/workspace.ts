@@ -1,5 +1,5 @@
 /**
- * Workspace persistence — API collections + environments (Postman-style), stored as a single
+ * Workspace persistence — API collections + environments, stored as a single
  * JSON file under the data directory. Environments hold `{{var}}` substitution values; an active
  * environment is applied to composed requests.
  */

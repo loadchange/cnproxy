@@ -1,11 +1,11 @@
 /**
- * Rule engine — whistle-inspired `pattern operator://value` rules.
+ * Rule engine — `pattern operator://value` rules.
  *
  * A rule line is:   <pattern> <operator>://<value>      (e.g. `example.com host://127.0.0.1`)
  * or the shorthand: <pattern> <url>                      (bare URL ⇒ rewrite/redirect target)
  *
  * Patterns (what the rule matches against a flow):
- *   ~<filter expr>      → full mitmproxy filter language (see filter.ts)
+ *   ~<filter expr>      → full filter language (see filter.ts)
  *   ^regex              → regex tested against the full URL
  *   contains `*`        → glob against host (no slash) or URL (with slash)
  *   bare.domain         → host match, leftmost label wildcarded automatically
@@ -405,7 +405,7 @@ function loadFileMock(path: string): { headers: Headers; body: Buffer } | null {
   return { headers, body };
 }
 
-/** Map a request path onto a local directory (whistle-style map-local), guarding traversal. */
+/** Map a request path onto a local directory (map-local), guarding traversal. */
 function loadDirMock(dir: string, reqPath: string, pattern: string): { headers: Headers; body: Buffer } | null {
   const base = resolve(dir.replace(/^file:\/\//, ""));
   let rel = (reqPath.split("?")[0] || "/");

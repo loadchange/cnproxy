@@ -1,6 +1,6 @@
 /**
  * Session persistence — save/load captured flows to disk so they survive restarts and can be
- * revisited (Reqable's "History"). Sessions are JSONL files (one FlowRecord per line) under
+ * revisited. Sessions are JSONL files (one FlowRecord per line) under
  * `<dataDir>/sessions/`, written with the `.cnp` extension.
  */
 import { mkdirSync, readdirSync, readFileSync, writeFileSync, existsSync, statSync } from "node:fs";

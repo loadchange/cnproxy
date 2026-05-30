@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 /**
  * cnproxy CLI.
  *
@@ -16,7 +16,7 @@ import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { ProxyServer, WebInspector, setLogLevel } from "../src/index.ts";
 import { log } from "../src/logger.ts";
 
-const HELP = `cnproxy — modern HTTP/HTTPS/WebSocket debugging proxy (Bun)
+const HELP = `cnproxy — modern HTTP/HTTPS/WebSocket debugging proxy (Node.js)
 
 Usage:
   cnproxy [start] [options]      Start proxy + web inspector
@@ -28,7 +28,7 @@ Options:
       --host <addr>     Listen address               (default 127.0.0.1)
       --no-decrypt      Tunnel HTTPS without MITM decryption
   -u, --upstream <url>  Chain through an upstream proxy (http://host:port)
-      --rules <file>    Load rule file (whistle-style)
+      --rules <file>    Load rule file
       --ignore <hosts>  Comma-separated hosts to never decrypt
       --allow <hosts>   Comma-separated allow-list of hosts to decrypt
       --no-web          Do not start the web inspector
@@ -54,7 +54,7 @@ function getVersion(): string {
 
 async function main() {
   const { values, positionals } = parseArgs({
-    args: Bun.argv.slice(2),
+    args: process.argv.slice(2),
     allowPositionals: true,
     options: {
       port: { type: "string", short: "p" },
@@ -108,12 +108,20 @@ async function main() {
   let web: WebInspector | undefined;
   if (!values["no-web"]) {
     web = new WebInspector(proxy);
-    web.start();
-    if (values.open) openBrowser(`http://${proxy.options.get("webHost")}:${proxy.options.get("webPort")}`);
+    try {
+      web.start();
+    } catch {
+      web = undefined;
+      log.debug("Web inspector failed to start");
+    }
+    if (web && values.open) openBrowser(`http://${proxy.options.get("webHost")}:${web.port}`);
   }
 
-  log.banner(`\nSet your client/system HTTP(S) proxy to ${proxy.options.get("host")}:${proxy.options.get("port")}`);
-  log.banner(`Trust the CA: open http://${proxy.options.get("webHost")}:${proxy.options.get("webPort")}/ca.crt\n`);
+  // Machine-readable ready signal for Tauri sidecar integration
+  process.stdout.write(`[cnproxy:ready] ${JSON.stringify({ proxyPort: proxy.port, webPort: web?.port ?? 0 })}\n`);
+
+  log.banner(`\nSet your client/system HTTP(S) proxy to ${proxy.options.get("host")}:${proxy.port}`);
+  log.banner(`Trust the CA: open http://${proxy.options.get("webHost")}:${web?.port ?? proxy.options.get("webPort")}/ca.crt\n`);
 
   const shutdown = async () => {
     log.info("shutting down…");
@@ -146,7 +154,8 @@ function splitList(v?: string): string[] {
 function openBrowser(url: string) {
   const cmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
   try {
-    Bun.spawn([cmd, url], { stdout: "ignore", stderr: "ignore" });
+    const { spawn } = require("node:child_process");
+    spawn(cmd, [url], { stdio: "ignore", detached: true }).unref();
   } catch {
     /* best effort */
   }

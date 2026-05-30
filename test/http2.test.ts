@@ -3,7 +3,7 @@
  * and relayed. This is the headline transport gap vs Reqable. We drive a real h2 client through
  * the proxy (CONNECT → TLS with ALPN h2 → http2.connect) against an h1 origin.
  */
-import { test, expect, beforeAll, afterAll } from "bun:test";
+import { test, expect, beforeAll, afterAll } from "vitest";
 import https from "node:https";
 import http2 from "node:http2";
 import net from "node:net";

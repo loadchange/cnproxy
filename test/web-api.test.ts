@@ -3,7 +3,7 @@
  * Covers: flow list, detail (with decoded bodies), mark, replay, clear, options patch, stats,
  * CA download, static UI, and the WebSocket snapshot/add stream.
  */
-import { test, expect, beforeAll, afterAll } from "bun:test";
+import { test, expect, beforeAll, afterAll } from "vitest";
 import http from "node:http";
 import { ProxyServer, WebInspector } from "../src/index.ts";
 import { setLogLevel } from "../src/logger.ts";

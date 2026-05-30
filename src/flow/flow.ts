@@ -1,6 +1,6 @@
 /**
  * Flow data model — the central unit of captured traffic.
- * Mirrors mitmproxy's HTTPFlow = Request + Response (+ error, websocket, metadata).
+ * A Flow = Request + Response (+ error, websocket, metadata).
  */
 
 import { Headers } from "./headers.ts";

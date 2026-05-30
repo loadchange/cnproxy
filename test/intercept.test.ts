@@ -2,7 +2,7 @@
  * Interception (breakpoints) — mitmproxy/Reqable parity: flows matching the intercept filter
  * pause; the operator can resume, kill, or EDIT the paused request before it goes upstream.
  */
-import { test, expect, beforeAll, afterAll } from "bun:test";
+import { test, expect, beforeAll, afterAll } from "vitest";
 import http from "node:http";
 import net from "node:net";
 import { ProxyServer, WebInspector } from "../src/index.ts";

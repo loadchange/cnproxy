@@ -6,9 +6,10 @@ const rowsEl = $("#rows");
 const detailEl = $("#detail");
 const statusEl = $("#status");
 
-const isLocalServer = location.hostname === "localhost" || location.hostname === "127.0.0.1";
-const API_BASE = isLocalServer ? "" : "http://127.0.0.1:8889";
-const WS_BASE = isLocalServer ? `ws://${location.host}` : "ws://127.0.0.1:8889";
+const isTauri = window.__TAURI_INTERNALS__ !== undefined || location.protocol === "tauri:" || location.hostname.includes("tauri");
+const isLocalServer = (location.hostname === "localhost" || location.hostname === "127.0.0.1") && !isTauri;
+let API_BASE = isLocalServer ? "" : "http://127.0.0.1:8889";
+let WS_BASE = isLocalServer ? `ws://${location.host}` : "ws://127.0.0.1:8889";
 
 if (!isLocalServer) {
   const originalFetch = window.fetch;
@@ -692,7 +693,134 @@ $("#cApplyAuth").onclick = () => {
   flash("Auth headers applied");
 };
 
-// Initial load
-loadWorkspace();
-loadOptions();
-connect();
+// ── Tauri desktop integration ──────────────────────────────────────────────────
+// In Tauri mode, wire up system proxy toggle, CA install, and keyboard shortcuts.
+
+let systemProxyOn = false;
+
+async function toggleSystemProxy() {
+  if (!isTauri || !window.__TAURI__) return;
+  try {
+    const result = await window.__TAURI__.core.invoke("toggle_system_proxy");
+    systemProxyOn = result.systemProxyOn;
+    const btn = document.getElementById("proxyToggleBtn");
+    if (btn) btn.textContent = systemProxyOn ? "Disable System Proxy" : "Enable System Proxy";
+    flash(systemProxyOn ? "System proxy enabled" : "System proxy disabled");
+  } catch (e) {
+    flash("Proxy toggle failed: " + e);
+  }
+}
+
+async function installCaCert() {
+  if (!isTauri || !window.__TAURI__) return;
+  try {
+    const result = await window.__TAURI__.core.invoke("install_ca_cert");
+    if (result.ok) {
+      flash("CA certificate installed ✓");
+    } else {
+      flash(result.message || "CA install cancelled");
+    }
+  } catch (e) {
+    flash("CA install failed: " + e);
+  }
+}
+
+async function uninstallCaCert() {
+  if (!isTauri || !window.__TAURI__) return;
+  try {
+    const result = await window.__TAURI__.core.invoke("uninstall_ca_cert");
+    flash(result.message || "CA removed");
+  } catch (e) {
+    flash("CA removal failed: " + e);
+  }
+}
+
+// ── Initial load ────────────────────────────────────────────────────────────────
+// In Tauri mode, wait for the sidecar engine to report its ports.
+if (isTauri && window.__TAURI__) {
+  setStatus("", "waiting for engine…");
+  window.__TAURI__.event.listen("cnproxy-ready", (ev) => {
+    const info = ev.payload;
+    API_BASE = `http://127.0.0.1:${info.webPort}`;
+    WS_BASE = `ws://127.0.0.1:${info.webPort}`;
+    loadWorkspace();
+    loadOptions();
+    connect();
+
+    // Inject Tauri-specific toolbar buttons after the sidecar is ready
+    injectTauriToolbar();
+  });
+} else {
+  loadWorkspace();
+  loadOptions();
+  connect();
+}
+
+function injectTauriToolbar() {
+  const toolbar = document.querySelector(".toolbar");
+  if (!toolbar || document.getElementById("proxyToggleBtn")) return;
+
+  const spacer = toolbar.querySelector(".spacer");
+
+  // System proxy toggle button
+  const proxyBtn = document.createElement("button");
+  proxyBtn.id = "proxyToggleBtn";
+  proxyBtn.className = "btn";
+  proxyBtn.textContent = "Enable System Proxy";
+  proxyBtn.title = "Toggle macOS/Windows/Linux system proxy to CNProxy";
+  proxyBtn.onclick = toggleSystemProxy;
+
+  // CA install button
+  const caBtn = document.createElement("button");
+  caBtn.id = "caInstallBtn";
+  caBtn.className = "btn";
+  caBtn.textContent = "Install CA";
+  caBtn.title = "Install CNProxy root CA into system trust store (requires admin)";
+  caBtn.onclick = installCaCert;
+
+  // Auto-start toggle
+  const autoBtn = document.createElement("label");
+  autoBtn.className = "toggle";
+  autoBtn.title = "Launch CNProxy on system startup";
+  autoBtn.innerHTML = '<input type="checkbox" id="autoStartCheck" /> Auto-start';
+  const autoCheck = autoBtn.querySelector("#autoStartCheck");
+  window.__TAURI__.core.invoke("plugin:autostart|is-enabled").then((enabled) => {
+    if (autoCheck) autoCheck.checked = enabled;
+  }).catch(() => {});
+  if (autoCheck) {
+    autoCheck.onchange = async () => {
+      try {
+        if (autoCheck.checked) {
+          await window.__TAURI__.core.invoke("plugin:autostart|enable");
+          flash("Auto-start enabled");
+        } else {
+          await window.__TAURI__.core.invoke("plugin:autostart|disable");
+          flash("Auto-start disabled");
+        }
+      } catch (e) {
+        flash("Auto-start toggle failed: " + e);
+        autoCheck.checked = !autoCheck.checked;
+      }
+    };
+  }
+
+  // Insert before the spacer
+  toolbar.insertBefore(proxyBtn, spacer);
+  toolbar.insertBefore(caBtn, spacer);
+
+  // Query initial proxy state
+  window.__TAURI__.core.invoke("get_proxy_ports").then((ports) => {
+    // Could display ports in status bar if desired
+  }).catch(() => {});
+}
+
+// ── Keyboard shortcuts (Tauri desktop only) ────────────────────────────────────
+if (isTauri && window.__TAURI__) {
+  document.addEventListener("keydown", (e) => {
+    const mod = e.metaKey || e.ctrlKey;
+    if (mod && e.key === "k") { e.preventDefault(); document.getElementById("clearBtn")?.click(); }
+    if (mod && e.key === "f") { /* let native find work or focus filter */ e.preventDefault(); document.getElementById("filter")?.focus(); }
+    if (mod && e.shiftKey && e.key === "R") { /* TODO: replay selected */ }
+    if (mod && e.shiftKey && e.key === "P") { e.preventDefault(); toggleSystemProxy(); }
+  });
+}

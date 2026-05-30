@@ -1,9 +1,9 @@
 /**
- * WebSocket interception over raw sockets. We never use node:http's `upgrade` event (whose
- * relay socket is unreliable under Bun); instead the router hands us the raw client socket
- * plus the already-peeked handshake. We open a raw connection to the origin, replay the
- * handshake (origin-form), and relay bytes verbatim in both directions — teeing a copy
- * through a frame parser so messages appear in the inspector.
+ * WebSocket interception over raw sockets. We use raw sockets (not node:http's `upgrade`
+ * event); the router hands us the raw client socket plus the already-peeked handshake.
+ * We open a raw connection to the origin, replay the handshake (origin-form), and relay
+ * bytes verbatim in both directions — teeing a copy through a frame parser so messages
+ * appear in the inspector.
  */
 
 import net from "node:net";

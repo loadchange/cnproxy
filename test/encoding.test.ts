@@ -4,7 +4,7 @@
  * text), and a resReplace/resBody rewrite of a compressed response must reach the client as a
  * valid, readable body.
  */
-import { test, expect, beforeAll, afterAll } from "bun:test";
+import { test, expect, beforeAll, afterAll } from "vitest";
 import http from "node:http";
 import zlib from "node:zlib";
 import { ProxyServer } from "../src/index.ts";

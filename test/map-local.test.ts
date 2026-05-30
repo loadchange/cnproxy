@@ -2,7 +2,7 @@
  * Map-local (dir://) and highlight:// rules — whistle-style directory mapping and Reqable-style
  * color tagging.
  */
-import { test, expect, beforeAll, afterAll } from "bun:test";
+import { test, expect, beforeAll, afterAll } from "vitest";
 import http from "node:http";
 import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";

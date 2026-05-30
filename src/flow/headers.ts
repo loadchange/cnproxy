@@ -1,5 +1,5 @@
 /**
- * Case-insensitive, order-preserving header collection (mitmproxy Headers analogue).
+ * Case-insensitive, order-preserving header collection.
  * Stores raw [name, value] pairs so we can replay traffic faithfully, while offering
  * convenient case-insensitive get/set.
  */

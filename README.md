@@ -1,13 +1,10 @@
 # cnproxy
 
-> A modern HTTP / HTTPS / WebSocket debugging & MITM proxy for developers — built on [Bun](https://bun.sh) + TypeScript.
+**Chipper Nut Proxy** · 奇克
 
-Capture, inspect, rewrite and mock network traffic with a live web inspector. cnproxy
-takes the proven ideas of [whistle](https://github.com/avwo/whistle) and
-[mitmproxy](https://github.com/mitmproxy/mitmproxy) (on-the-fly TLS interception, a flow
-model, a rule engine, an addon/hook system, a filter language) and packages them into a
-single fast, dependency-light Bun binary with a clean inspector UI inspired by
-[Reqable](https://reqable.com).
+> A modern HTTP / HTTPS / WebSocket debugging & MITM proxy — built on Node.js + TypeScript.
+
+Capture, inspect, rewrite and mock network traffic with a live web inspector.
 
 ```
 ┌──────────┐   HTTP/HTTPS/WS    ┌───────────────────────────┐      ┌──────────┐
@@ -29,11 +26,12 @@ single fast, dependency-light Bun binary with a clean inspector UI inspired by
   negotiated via ALPN and decoded into the same flow model as HTTP/1.
 - **HTTP proxy *and* SOCKS5/SOCKS4** on the same port (auto-detected), both feeding the same
   capture/decrypt/rules pipeline.
-- **API testing** ("the Postman half"): a request **composer**, environment variables, a
-  **cookie jar**, **cURL import/export**, **code generation** (curl/fetch/python), and a
-  persisted workspace of collections + environments.
+- **API testing** — request **composer**, environment variables, **cookie jar**, **cURL
+  import/export**, **code generation** (curl/fetch/python), and a persisted workspace of
+  collections + environments.
 - **Sessions / history** — save, list and reload captures to disk (survives restart);
-  **HAR import/export**; a request/response **diff** tool; per-stage **timing** (DNS/connect/TLS/TTFB).
+  **HAR import/export**; a request/response **diff** tool; per-stage **timing**
+  (DNS / connect / TLS / TTFB).
 - **Breakpoints** on requests *and* responses (resume / kill / edit), plus live **WebSocket
   message injection**.
 - **Live web inspector** — real-time flow list, request/response headers & bodies, JSON
@@ -41,33 +39,31 @@ single fast, dependency-light Bun binary with a clean inspector UI inspired by
 - **Transparent decompression** — `gzip`, `br` and `deflate` responses are captured
   **decoded**, so the inspector, body filters (`~b`/`~bs`) and `resReplace` all operate on
   real text. Untouched flows are relayed byte-for-byte; rewritten ones are re-sent decoded.
-- **Streaming relay** — Server-Sent Events, chunked and large (>1 MB) responses are forwarded
+- **Streaming relay** — Server-Sent Events, chunked and large (> 1 MB) responses are forwarded
   incrementally (not buffered), with a bounded copy teed into the inspector.
-- **Rule engine** (whistle-style) — redirect hosts, rewrite URLs, mock responses, inject
-  headers, replace body text, map local files, block, delay, and more.
-- **Filter language** (mitmproxy-style) — `~u`, `~m`, `~h`, `~c`, `&`, `|`, `!`, grouping.
-- **Breakpoints / interception** — pause matching flows and resume, kill, or **edit** the
-  request/response before it continues.
+- **Rule engine** — redirect hosts, rewrite URLs, mock responses, inject headers, replace body
+  text, map local files, block, delay, and more.
+- **Filter language** — `~u`, `~m`, `~h`, `~c`, `&`, `|`, `!`, grouping.
 - **Replay** any captured request with one click.
-- **HAR 1.2 export** — download a captured session and open it in Chrome DevTools, Charles,
-  Reqable, … (toolbar **Export HAR** or `GET /api/export/har`).
+- **HAR 1.2 export** — download a captured session, openable in any HAR-compatible viewer
+  (toolbar **Export HAR** or `GET /api/export/har`).
 - **Addon/hook API** — extend the proxy programmatically (`requestheaders`, `request`,
   `response`, `websocketMessage`, …).
 - **Upstream proxy chaining**, allow/ignore host lists, body-size caps.
-- **Zero build step** — runs straight from TypeScript on Bun.
+- **Zero build step** — runs straight from TypeScript via `tsx`.
 
 ## Install
 
-Requires [Bun](https://bun.sh) ≥ 1.1.
+Requires [Node.js](https://nodejs.org) ≥ 20.
 
 ```bash
 # global
-bun add -g cnproxy
+npm install -g cnproxy
 cnproxy --help
 
 # or run from a clone
-bun install
-bun run bin/cnproxy.ts
+npm install
+npm start
 ```
 
 ## Quick start
@@ -76,10 +72,12 @@ bun run bin/cnproxy.ts
 cnproxy                       # proxy on :8888, inspector on http://127.0.0.1:8889
 ```
 
-1. Point your client at the proxy: `export HTTP_PROXY=http://127.0.0.1:8888 HTTPS_PROXY=http://127.0.0.1:8888`
-   (or set it in your OS/browser network settings).
+1. Point your client at the proxy:
+   `export HTTP_PROXY=http://127.0.0.1:8888 HTTPS_PROXY=http://127.0.0.1:8888`
+   (or set it in your OS / browser network settings).
 2. To decrypt HTTPS, trust the root CA once:
-   - open <http://127.0.0.1:8889/ca.crt> while running, or `cnproxy ca --export ~/cnproxy-ca.crt`
+   - open <http://127.0.0.1:8889/ca.crt> while running, or
+     `cnproxy ca --export ~/cnproxy-ca.crt`
    - add it to your system / browser trust store.
 3. Open the inspector at <http://127.0.0.1:8889> and watch traffic flow in.
 
@@ -105,22 +103,22 @@ cnproxy ca [--export <file>]   Show or export the root CA certificate
 
 ## Cross-platform builds
 
-cnproxy compiles to a **single self-contained executable** (Bun + the embedded web UI) that runs
-without Bun installed:
+cnproxy compiles to a **single self-contained executable** (via esbuild + @yao-pkg/pkg, with
+the web UI embedded) that runs without Node.js installed:
 
 ```bash
-bun run build              # native binary for the current platform → dist/cnproxy
-bun run build:all          # macOS (arm64/x64), Linux (x64/arm64), Windows (x64) → dist/
+npm run build              # bundle + native binary for the current platform → dist/
 ```
 
-Per-target scripts: `build:macos-arm64`, `build:macos-x64`, `build:linux-x64`,
-`build:linux-arm64`, `build:windows-x64`. The web inspector assets are embedded in the binary,
-so the same executable is the whole product on each desktop/server platform.
+The build pipeline bundles all source into a single CJS file with esbuild, then compiles it
+with `@yao-pkg/pkg` for targets: macOS (arm64/x64), Linux (x64/arm64), Windows (x64). The
+web inspector assets are embedded in the bundle, so the same executable is the whole product
+on each desktop/server platform.
 
-**Mobile / other devices:** point the device's Wi-Fi/system proxy (or SOCKS5) at the machine
+**Mobile / other devices:** point the device's Wi-Fi / system proxy (or SOCKS5) at the machine
 running cnproxy, trust the CA once, and open the (responsive) inspector at
 `http://<host>:8889` from the device's browser. A dedicated native mobile app (on-device
-VPN capture) is a separate effort and is *not* part of this codebase — see `docs/ROADMAP.md`.
+VPN capture) is a separate effort — see `docs/ROADMAP.md`.
 
 ## Rules
 
@@ -231,7 +229,7 @@ src/
   flow/                 Flow / Request / Response model + Headers + FlowStore (event bus)
   rules/                rule engine (engine.ts) + filter language (filter.ts)
   addons/               addon manager + hook contract
-  web/                  Bun.serve inspector (server.ts) + single-page UI (ui/)
+  web/                  node:http + ws inspector (server.ts) + single-page UI (ui/)
   options.ts            reactive, typed options
 bin/cnproxy.ts          CLI
 ```
@@ -241,15 +239,15 @@ parsed without being consumed) and then routed — `CONNECT` to a TLS terminator
 host cert via SNI, `Upgrade: websocket` to a raw relay, and everything else bridged into an
 internal `http.Server` that runs the flow pipeline. This low-level approach (rather than
 node:http's `connect`/`upgrade` events) is what lets the same code intercept HTTP, HTTPS,
-ws and wss uniformly and reliably on Bun.
+ws and wss uniformly and reliably.
 
 ## Development
 
 ```bash
-bun install
-bun run dev          # watch mode
-bun run typecheck    # tsc --noEmit
-bun test             # full functional suite (rules, filter, encoding, streaming,
+npm install
+npm run dev          # watch mode
+npm run typecheck    # tsc --noEmit
+npm test             # full functional suite (rules, filter, encoding, streaming,
                      #   web API, HAR, intercept, passthrough, e2e, websocket)
 ```
 

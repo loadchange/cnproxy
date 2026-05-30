@@ -1,9 +1,8 @@
-# cnproxy Roadmap — parity vs Reqable
+# cnproxy Roadmap
 
-Reqable = **Fiddler + Charles + Postman**: an API-debugging proxy *and* an API-testing client.
-This doc tracks cnproxy's coverage of that feature set.
+Feature status and known gaps.
 
-Legend: ✅ done · ⚠️ partial · ❌ missing/out-of-scope
+Legend: ✅ done · ⚠️ partial · ❌ missing / out of scope
 
 ## Part 1 — API Debugging (capture / MITM proxy)
 
@@ -11,16 +10,16 @@ Legend: ✅ done · ⚠️ partial · ❌ missing/out-of-scope
 | --- | --- | --- |
 | HTTP/1.x | ✅ | |
 | HTTP/2 (ALPN, framing, multiplexing) | ✅ | Client-side h2 MITM; upstream to origin currently h1. |
-| HTTP/3 (QUIC) | ❌ | Out of scope (Reqable lacks it for debug too). |
+| HTTP/3 (QUIC) | ❌ | Out of scope. |
 | HTTP/HTTPS proxy mode (CONNECT) | ✅ | |
 | SOCKS4/4a/5 inbound | ✅ | First-byte detection → NO-AUTH negotiation → same pipeline. |
-| TLS 1.1/1.2/1.3 | ✅ | node/Bun defaults. |
+| TLS 1.1/1.2/1.3 | ✅ | Node.js defaults. |
 | IPv4 + IPv6 | ✅ | literal parsing in CONNECT/SOCKS/authority. |
 | WebSocket capture | ✅ | |
 | WebSocket message inject/edit | ✅ | injectWs / POST /api/flows/:id/ws-send. |
 | Upstream / secondary proxy | ✅ | |
 | Composing API (build & send) | ✅ | See Part 2. |
-| Search & filter | ✅ | mitmproxy-style filter language + client text filter. |
+| Search & filter | ✅ | flow filter language + client text filter. |
 | Rewrite: redirect / map-local / map-remote / modify | ✅ | host/rewrite/redirect/mock/file/dir/req+resHeaders/req+resReplace/status/type/ua/referer. |
 | Breakpoint (request) | ✅ | resume / kill / edit. |
 | Breakpoint (response) | ✅ | interceptResponse — edit before relay (h1 + h2). |
@@ -36,13 +35,13 @@ Legend: ✅ done · ⚠️ partial · ❌ missing/out-of-scope
 | HAR export / import | ✅ | flowsToHar / harToFlows + endpoints. |
 | Custom SSL cert import / pinning / mTLS | ❌ | only self-minted CA. |
 
-## Part 2 — API Testing (Postman-like)
+## Part 2 — API Testing
 
 | Capability | Status | Notes |
 | --- | --- | --- |
 | Request composer | ✅ | composeRequest + POST /api/compose. |
 | API collections | ✅ | workspace.json (collections). |
-| Import from Postman / Hoppscotch | ❌ | format-specific importers not written (HAR import covers interchange). |
+| Import from external tools | ❌ | format-specific importers not written (HAR import covers interchange). |
 | Environments (global + user vars) | ✅ | {{var}} substitution from active env. |
 | Batch editing | ⚠️ | spec-level editing; no dedicated bulk UI. |
 | Pre/post-request scripting | ⚠️ | addon hooks; no per-request script slot. |
@@ -53,10 +52,9 @@ Legend: ✅ done · ⚠️ partial · ❌ missing/out-of-scope
 | Request history | ✅ | composed requests are recorded flows + sessions. |
 | cURL import / export | ✅ | parseCurl + generateCode("curl"). |
 
-## Known engine gaps (honest re-audit — not yet closed)
+## Known engine gaps
 
-These are real correctness/perf gaps surfaced by a critical re-review, distinct from the
-"out of scope" list below:
+Correctness / perf gaps surfaced by critical re-review, distinct from the "out of scope" list below:
 
 - **HTTP/2 to origin** — client-side h2 works, but upstream is always HTTP/1.1. h2-only origins,
   gRPC, and server-push aren't proxied end-to-end.
@@ -76,29 +74,26 @@ These are real correctness/perf gaps surfaced by a critical re-review, distinct 
 
 ## UI / productization
 
-The web inspector now wires the composer, sessions (save/load), HAR import, "Copy as"
+The web inspector wires the composer, sessions (save/load), HAR import, "Copy as"
 code-gen, "Edit & resend", per-stage timing, highlight colors, response-phase breakpoint, an
-inline paused-flow editor, and WebSocket injection. Verified in a real browser. Still missing
-vs Reqable's native GUI: a visual diff view, collections/environments management UI, auth
-helper forms, batch-edit, and the overall polish of a native multi-platform app.
+inline paused-flow editor, and WebSocket injection. Verified in a real browser. Still missing:
+a visual diff view, collections/environments management UI, auth helper forms, batch-edit,
+and the overall polish of a native multi-platform app.
 
-## Multi-platform delivery ("各种端")
+## Multi-platform delivery
 
-Reqable ships native apps on Windows/Mac/Linux + iOS/Android. cnproxy's story:
-
-- **Desktop / server (Win/Mac/Linux, x64+arm64)** ✅ — `bun build --compile` produces a single
-  self-contained executable per platform with the web UI embedded (no Bun needed at runtime).
-  `bun run build:all`. Verified: the macOS binary runs from any directory, serves the embedded
+- **Desktop / server (Win/Mac/Linux, x64+arm64)** ✅ — esbuild + @yao-pkg/pkg produces a single
+  self-contained executable per platform with the web UI embedded (no Node.js needed at runtime).
+  `npm run build`. Verified: the macOS binary runs from any directory, serves the embedded
   UI, and proxies.
 - **Any device with a browser (incl. mobile)** ✅ via proxy-config — point the device's
-  Wi-Fi/SOCKS proxy at the host and open the responsive inspector in the device browser
-  (Reqable's "collaborative mode" without a custom app).
+  Wi-Fi/SOCKS proxy at the host and open the responsive inspector in the device browser.
 - **Native desktop *window*** ⚠️ — currently a browser tab, not a Tauri/Electron-wrapped window.
   A thin webview wrapper is a feasible follow-up.
 - **Native mobile apps (on-device VPN capture)** ❌ — a separate Swift/Kotlin codebase; not
-  achievable inside a Bun/TS project. Out of scope here.
+  achievable inside a Node.js/TS project. Out of scope here.
 
-## Structurally out of scope (not "features" of this codebase)
+## Structurally out of scope
 
 A Flutter/C++ native multi-platform client and on-device mobile VPN-capture apps; an embedded
 Python scripting runtime (cnproxy exposes a TypeScript addon API instead); HTTP/3 (QUIC);
@@ -106,6 +101,6 @@ OS-level traffic-source attribution; deep pinned-cert / mutual-TLS analysis.
 
 ## Test coverage
 
-106 functional tests across 18 files: e2e, http2, socks, websocket, encoding, streaming, rules,
+110 functional tests across 18 files: e2e, http2, socks, websocket, encoding, streaming, rules,
 filter, map-local, intercept, intercept-response, persistence, import-timing, composer, diff,
 har, web-api, passthrough. `tsc --noEmit` clean.

@@ -2,7 +2,7 @@
  * API-testing engine — compose/send requests, environment variable substitution, cookie jar,
  * cURL import, and code-snippet generation (curl/fetch/python).
  */
-import { test, expect, beforeAll, afterAll } from "bun:test";
+import { test, expect, beforeAll, afterAll } from "vitest";
 import http from "node:http";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";

@@ -1,7 +1,7 @@
 /**
  * Flow diff tool — locate deviations between two captured messages (Reqable's diff).
  */
-import { test, expect } from "bun:test";
+import { test, expect } from "vitest";
 import { diffLines, diffFlows } from "../src/api/diff.ts";
 import { Flow, CnResponse } from "../src/flow/flow.ts";
 

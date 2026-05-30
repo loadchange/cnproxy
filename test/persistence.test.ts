@@ -3,7 +3,7 @@
  * (and a process restart, simulated by a fresh ProxyServer reading the same dataDir), with
  * bodies and metadata intact. This is Reqable's "History".
  */
-import { test, expect, beforeAll, afterAll } from "bun:test";
+import { test, expect, beforeAll, afterAll } from "vitest";
 import http from "node:http";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";

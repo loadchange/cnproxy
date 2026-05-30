@@ -1,7 +1,6 @@
 /**
  * AddonManager — ordered registry that dispatches lifecycle hooks to addons.
- * Equivalent to mitmproxy's addonmanager: addons run in registration order and a
- * throwing addon is logged but does not abort the chain.
+ * Addons run in registration order and a throwing addon is logged but does not abort the chain.
  */
 
 import type { Addon, HookName } from "./types.ts";

@@ -2,7 +2,7 @@
  * SOCKS5 inbound — a SOCKS5 client must be able to tunnel HTTP and HTTPS (MITM-decrypted) through
  * the same front port as the HTTP proxy. We hand-roll the SOCKS5 handshake over a raw socket.
  */
-import { test, expect, beforeAll, afterAll } from "bun:test";
+import { test, expect, beforeAll, afterAll } from "vitest";
 import http from "node:http";
 import https from "node:https";
 import net from "node:net";

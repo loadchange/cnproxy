@@ -1,6 +1,6 @@
 /**
- * HAR 1.2 export — the universal capture-interchange format (Chrome DevTools, Charles, Reqable,
- * Fiddler all read/write it). Lets users hand a captured session to any other tool. Bodies are
+ * HAR 1.2 export — the universal capture-interchange format.
+ * Lets users hand a captured session to any other tool. Bodies are
  * already stored decoded, so the HAR `content.text` is human-readable.
  */
 import { Flow, CnResponse } from "./flow.ts";

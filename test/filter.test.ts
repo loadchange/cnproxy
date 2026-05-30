@@ -2,7 +2,7 @@
  * Filter expression language — mitmproxy flowfilter parity. Unit-tests each atom and the
  * boolean combinators against synthetic flows.
  */
-import { test, expect } from "bun:test";
+import { test, expect } from "vitest";
 import { compileFilter } from "../src/rules/filter.ts";
 import { Flow, CnResponse } from "../src/flow/flow.ts";
 

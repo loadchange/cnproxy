@@ -1,8 +1,11 @@
-import { test, expect, beforeAll, afterAll } from "bun:test";
+import { test, expect, beforeAll, afterAll } from "vitest";
 import net from "node:net";
 import tls from "node:tls";
+import http from "node:http";
+import https from "node:https";
 import zlib from "node:zlib";
 import forge from "node-forge";
+import { WebSocketServer } from "ws";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -27,25 +30,20 @@ function selfSigned(): { key: string; cert: string } {
 
 setLogLevel("error");
 
-let wsOrigin: ReturnType<typeof Bun.serve>;
+let wsHttpServer: http.Server;
+let wsServer: WebSocketServer;
 let proxy: ProxyServer;
 let originPort = 0;
 const PROXY_PORT = 18890;
 
 beforeAll(async () => {
-  wsOrigin = Bun.serve({
-    port: 0,
-    fetch(req, server) {
-      if (server.upgrade(req)) return undefined;
-      return new Response("ok");
-    },
-    websocket: {
-      message(ws, msg) {
-        ws.send("echo:" + msg);
-      },
-    },
+  wsHttpServer = http.createServer((_req, res) => res.end("ok"));
+  wsServer = new WebSocketServer({ server: wsHttpServer });
+  wsServer.on("connection", (ws) => {
+    ws.on("message", (msg) => ws.send("echo:" + msg.toString()));
   });
-  originPort = wsOrigin.port;
+  await new Promise<void>((r) => wsHttpServer.listen(0, "127.0.0.1", () => r()));
+  originPort = (wsHttpServer.address() as { port: number }).port;
   const dataDir = mkdtempSync(join(tmpdir(), "cnproxy-ws-"));
   proxy = new ProxyServer({ port: PROXY_PORT, dataDir });
   await proxy.start();
@@ -53,7 +51,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await proxy.stop();
-  wsOrigin.stop(true);
+  wsServer.close();
+  wsHttpServer.close();
 });
 
 /** Build a client→server masked text frame (RFC 6455 requires client masking). */
@@ -129,16 +128,13 @@ test("captures WebSocket frames through the proxy (absolute-URI upgrade)", async
 });
 
 test("captures decrypted wss frames (CONNECT + TLS + upgrade)", async () => {
-  const tlsWsOrigin = Bun.serve({
-    port: 0,
-    tls: selfSigned(),
-    fetch(req, server) {
-      if (server.upgrade(req)) return undefined;
-      return new Response("ok");
-    },
-    websocket: { message(ws, msg) { ws.send("secure:" + msg); } },
+  const tlsHttpServer = https.createServer(selfSigned(), (_req, res) => res.end("ok"));
+  const tlsWsServer = new WebSocketServer({ server: tlsHttpServer });
+  tlsWsServer.on("connection", (ws) => {
+    ws.on("message", (msg) => ws.send("secure:" + msg.toString()));
   });
-  const tlsPort = tlsWsOrigin.port;
+  await new Promise<void>((r) => tlsHttpServer.listen(0, "127.0.0.1", () => r()));
+  const tlsPort = (tlsHttpServer.address() as { port: number }).port;
 
   const echo = await new Promise<string>((resolve, reject) => {
     const raw = net.connect(PROXY_PORT, "127.0.0.1");
@@ -191,7 +187,8 @@ test("captures decrypted wss frames (CONNECT + TLS + upgrade)", async () => {
   const flow = proxy.store.list().filter((f) => f.type === "websocket").find((f) => f.request.scheme === "https");
   expect(flow).toBeDefined();
   expect(flow!.websocketMessages.map((m) => m.content.toString())).toContain("ping");
-  tlsWsOrigin.stop(true);
+  tlsWsServer.close();
+  tlsHttpServer.close();
 });
 
 test("WsFrameParser decompresses permessage-deflate frames", () => {

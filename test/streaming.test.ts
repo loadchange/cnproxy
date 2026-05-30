@@ -3,7 +3,7 @@
  * not buffered whole. A buffering proxy makes SSE hang forever and pins big downloads in memory.
  * mitmproxy/Reqable stream by default; we must too (while still teeing a bounded capture copy).
  */
-import { test, expect, beforeAll, afterAll } from "bun:test";
+import { test, expect, beforeAll, afterAll } from "vitest";
 import http from "node:http";
 import net from "node:net";
 import { ProxyServer } from "../src/index.ts";

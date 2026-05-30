@@ -9,9 +9,8 @@
  *   • Upgrade: websocket → raw bidirectional relay with frame capture.
  *   • everything else    → bridged to an internal `http.Server` that runs the request handler.
  *
- * We deliberately avoid node:http's `connect`/`upgrade` events (whose relay sockets are
- * unreliable under Bun) by doing the routing ourselves at the socket level — the same
- * low-level approach whistle/mitmproxy take.
+ * We deliberately avoid node:http's `connect`/`upgrade` events by doing the routing
+ * ourselves at the socket level.
  */
 
 import http from "node:http";
@@ -31,7 +30,7 @@ import { createContext, type ProxyContext } from "./context.ts";
 import { handleRequest, replayFlow } from "./request-handler.ts";
 import { handleH2Stream } from "./h2-handler.ts";
 import { relayWebSocket, injectWsMessage } from "./websocket.ts";
-import { peekRequestHead } from "./head-parser.ts";
+import { peekRequestHead, type PeekedRequest } from "./head-parser.ts";
 import { negotiateSocks } from "./socks.ts";
 import { saveSession, loadSession, listSessions, sessionsDir } from "../flow/session.ts";
 import { existsSync } from "node:fs";
@@ -89,6 +88,11 @@ export class ProxyServer {
   /** Shared runtime context (available after start()). */
   get context(): ProxyContext {
     return this.ctx;
+  }
+
+  /** Actual port the proxy front is bound to (resolved after start). */
+  get port(): number {
+    return portOf(this.frontServer);
   }
 
   /** Re-issue a captured request as a new flow. */
@@ -179,7 +183,8 @@ export class ProxyServer {
     this.h2Server.on("stream", (stream, headers) => {
       const sock = stream.session?.socket as Socket | undefined;
       const meta = sock ? this.connMeta.get(sock.remotePort ?? 0) : undefined;
-      void handleH2Stream(this.ctx, stream, headers, meta?.target);
+      const target = meta?.target ?? (sock as any)?._cnTarget;
+      void handleH2Stream(this.ctx, stream, headers, target);
     });
     this.h2Server.on("sessionError", (e) => log.debug("h2 session error:", e.message));
     this.h2Server.on("clientError", () => {});
@@ -338,9 +343,15 @@ export class ProxyServer {
       return;
     }
 
+    // Bypass own web inspector to avoid feedback loop when browser proxies everything
+    const resolvedTarget = mitmTarget ?? targetFromHead(head, scheme === "https" ? 443 : 80);
+    if (this.isOwnWebInspector(resolvedTarget)) {
+      this.passthroughToSelf(socket, head);
+      return;
+    }
+
     if ((head.headers.get("upgrade") ?? "").toLowerCase() === "websocket") {
-      const target = mitmTarget ?? targetFromHead(head, scheme === "https" ? 443 : 80);
-      relayWebSocket(this.ctx, head, socket, remote, scheme, target);
+      relayWebSocket(this.ctx, head, socket, remote, scheme, resolvedTarget);
       return;
     }
 
@@ -366,6 +377,11 @@ export class ProxyServer {
   private handleConnect(clientSocket: Socket, hostport: string, rest: Buffer): void {
     const { host, port } = splitHostPort(hostport, 443);
     clientSocket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
+
+    if (this.isOwnWebInspector({ host, port })) {
+      this.blindTunnel(clientSocket, rest, host, port);
+      return;
+    }
 
     if (!this.shouldDecrypt(host)) {
       this.blindTunnel(clientSocket, rest, host, port);
@@ -411,6 +427,26 @@ export class ProxyServer {
     const allow = this.options.get("allowHosts");
     if (allow.length && !allow.some((p) => matchHost(p, host))) return false;
     return true;
+  }
+
+  /** Check if the target points to our own web inspector (avoid feedback loop when proxied). */
+  private isOwnWebInspector(target: { host: string; port: number }): boolean {
+    if (target.port !== this.options.get("webPort")) return false;
+    const h = target.host.toLowerCase();
+    return h === "127.0.0.1" || h === "localhost" || h === "::1" || h === "0.0.0.0";
+  }
+
+  /** Pipe directly to the web inspector without capture (bypass for self-traffic). */
+  private passthroughToSelf(socket: Duplex, head: PeekedRequest): void {
+    const webPort = this.options.get("webPort");
+    const bridge = net.connect(webPort, "127.0.0.1", () => {
+      bridge.write(head.headBuf);
+      if (head.rest.length) bridge.write(head.rest);
+      socket.pipe(bridge);
+      bridge.pipe(socket as unknown as NodeJS.WritableStream);
+    });
+    bridge.on("error", () => socket.destroy());
+    socket.on("close", () => bridge.destroy());
   }
 
   private autoSaveTimer: any = null;
@@ -490,7 +526,7 @@ function listen(server: http.Server, port: number, host: string): Promise<void> 
   });
 }
 
-function portOf(server: http.Server): number {
+function portOf(server: http.Server | net.Server): number {
   return (server.address() as { port: number }).port;
 }
 
