@@ -35,6 +35,8 @@ import { peekRequestHead } from "./head-parser.ts";
 import { negotiateSocks } from "./socks.ts";
 import { saveSession, loadSession, listSessions } from "../flow/session.ts";
 import { harToFlows } from "../flow/har.ts";
+import { composeRequest, CookieJar, type RequestSpec } from "../api/composer.ts";
+import { loadWorkspace, saveWorkspace, activeEnvVars, type Workspace } from "../api/workspace.ts";
 import { log } from "../logger.ts";
 
 interface ConnMeta {
@@ -55,6 +57,8 @@ export class ProxyServer {
   readonly ca: CertificateAuthority;
   /** Product version, surfaced to exporters (HAR creator) and the UI. */
   readonly version: string = "5.0.0";
+  /** Cookie jar shared by the API-testing composer. */
+  readonly jar = new CookieJar();
 
   private ctx!: ProxyContext;
   private frontServer!: net.Server;
@@ -112,6 +116,25 @@ export class ProxyServer {
     const flows = harToFlows(har);
     for (const f of flows) this.store.add(f);
     return flows.length;
+  }
+
+  /** Compose and send an arbitrary request (API-testing). Applies the active env + cookie jar. */
+  async compose(spec: RequestSpec, opts: { useEnv?: boolean; useJar?: boolean } = {}) {
+    const ws = this.loadWorkspace();
+    return composeRequest(this.ctx, spec, {
+      env: opts.useEnv === false ? {} : activeEnvVars(ws),
+      jar: opts.useJar === false ? undefined : this.jar,
+    });
+  }
+
+  /** Load the persisted workspace (collections + environments). */
+  loadWorkspace(): Workspace {
+    return loadWorkspace(this.options.get("dataDir"));
+  }
+
+  /** Persist the workspace. */
+  saveWorkspace(ws: Workspace): void {
+    saveWorkspace(this.options.get("dataDir"), ws);
   }
 
   /** Replace the in-memory capture with a saved session; returns the number of flows loaded. */

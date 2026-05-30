@@ -10,6 +10,8 @@ import type { ProxyServer } from "../core/proxy.ts";
 import type { Flow } from "../flow/flow.ts";
 import { Headers } from "../flow/headers.ts";
 import { flowsToHar } from "../flow/har.ts";
+import { parseCurl, generateCode, type RequestSpec, type CodeLang } from "../api/composer.ts";
+import type { Workspace } from "../api/workspace.ts";
 import { log } from "../logger.ts";
 
 const UI_DIR = join(import.meta.dir, "ui");
@@ -138,6 +140,27 @@ export class WebInspector {
       return json({ ok: true, replayed: replayed.filter(Boolean).length });
     }
 
+    // ---- API testing: composer / cURL / workspace ----
+    if (pathname === "/api/compose" && req.method === "POST") {
+      const spec = (await req.json().catch(() => null)) as RequestSpec | null;
+      if (!spec?.url) return json({ error: "url required" }, 400);
+      const flow = await this.proxy.compose(spec);
+      return json(flow.toDetail());
+    }
+    if (pathname === "/api/curl/parse" && req.method === "POST") {
+      const body = (await req.json().catch(() => ({}))) as { command?: string };
+      return json(parseCurl(body.command ?? ""));
+    }
+    if (pathname === "/api/workspace") {
+      if (req.method === "GET") return json(this.proxy.loadWorkspace());
+      if (req.method === "PUT") {
+        const ws = (await req.json().catch(() => null)) as Workspace | null;
+        if (!ws) return json({ error: "invalid workspace" }, 400);
+        this.proxy.saveWorkspace(ws);
+        return json({ ok: true });
+      }
+    }
+
     if (pathname === "/api/clear" && req.method === "POST") {
       store.clear();
       return json({ ok: true });
@@ -180,7 +203,7 @@ export class WebInspector {
     }
 
     // /api/flows/:id  and  /api/flows/:id/:action
-    const m = pathname.match(/^\/api\/flows\/([^/]+)(?:\/([a-z]+))?$/);
+    const m = pathname.match(/^\/api\/flows\/([^/]+)(?:\/([a-z-]+))?$/);
     if (m) {
       const id = m[1]!;
       const action = m[2];
@@ -188,6 +211,13 @@ export class WebInspector {
       if (!flow) return json({ error: "not found" }, 404);
 
       if (!action && req.method === "GET") return json(flow.toDetail());
+
+      if (action === "code" && req.method === "GET") {
+        const lang = (url.searchParams.get("lang") ?? "curl") as CodeLang;
+        return new Response(generateCode(flow, ["curl", "fetch", "python"].includes(lang) ? lang : "curl"), {
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
 
       if (req.method === "POST") {
         switch (action) {
