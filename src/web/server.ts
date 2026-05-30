@@ -130,6 +130,23 @@ export class WebInspector {
       return json({ ok: true });
     }
 
+    // ---- session persistence / history ----
+    if (pathname === "/api/sessions" && req.method === "GET") {
+      return json(this.proxy.listSessions());
+    }
+    if (pathname === "/api/sessions/save" && req.method === "POST") {
+      const body = (await req.json().catch(() => ({}))) as { name?: string };
+      const name = body.name || `session-${store.list().length}`;
+      const path = this.proxy.saveSession(name);
+      return json({ ok: true, path });
+    }
+    if (pathname === "/api/sessions/load" && req.method === "POST") {
+      const body = (await req.json().catch(() => ({}))) as { name?: string };
+      if (!body.name) return json({ error: "name required" }, 400);
+      const count = this.proxy.loadSession(body.name);
+      return json({ ok: true, flows: count });
+    }
+
     if (pathname === "/api/options") {
       if (req.method === "GET") return json(this.proxy.options.toJSON());
       if (req.method === "POST") {

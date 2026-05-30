@@ -91,8 +91,8 @@ export class Flow {
   intercepted = false;
   private resumeResolver: ResumeResolver | null = null;
 
-  constructor(client: ClientInfo, now: number) {
-    this.id = randomUUID();
+  constructor(client: ClientInfo, now: number, id?: string) {
+    this.id = id ?? randomUUID();
     this.request = new CnRequest();
     this.client = client;
     this.timestampCreated = now;
@@ -125,6 +125,95 @@ export class Flow {
       this.resumeResolver("kill");
       this.resumeResolver = null;
     }
+  }
+
+  /** Lossless serialization for persistence (full fields + base64 bodies). */
+  toRecord(): FlowRecord {
+    const reqHdr = this.request.headers.entries();
+    return {
+      id: this.id,
+      type: this.type,
+      timestampCreated: this.timestampCreated,
+      marked: this.marked,
+      comment: this.comment,
+      mocked: this.mocked,
+      appliedRules: this.appliedRules,
+      error: this.error ? { msg: this.error.msg, timestamp: this.error.timestamp } : null,
+      client: this.client,
+      request: {
+        scheme: this.request.scheme,
+        host: this.request.host,
+        port: this.request.port,
+        method: this.request.method,
+        path: this.request.path,
+        httpVersion: this.request.httpVersion,
+        headers: reqHdr,
+        body: this.request.body ? this.request.body.toString("base64") : null,
+        bodyTruncated: this.request.bodyTruncated,
+        timestampStart: this.request.timestampStart,
+        timestampEnd: this.request.timestampEnd,
+      },
+      response: this.response
+        ? {
+            statusCode: this.response.statusCode,
+            reason: this.response.reason,
+            httpVersion: this.response.httpVersion,
+            headers: this.response.headers.entries(),
+            body: this.response.body ? this.response.body.toString("base64") : null,
+            bodyTruncated: this.response.bodyTruncated,
+            timestampStart: this.response.timestampStart,
+            timestampEnd: this.response.timestampEnd,
+          }
+        : null,
+      websocketMessages: this.websocketMessages.map((m) => ({
+        fromClient: m.fromClient,
+        type: m.type,
+        content: m.content.toString("base64"),
+        timestamp: m.timestamp,
+      })),
+    };
+  }
+
+  /** Reconstruct a flow from a persisted record. */
+  static fromRecord(rec: FlowRecord): Flow {
+    const flow = new Flow(rec.client, rec.timestampCreated, rec.id);
+    flow.type = rec.type;
+    flow.marked = rec.marked;
+    flow.comment = rec.comment;
+    flow.mocked = rec.mocked;
+    flow.appliedRules = rec.appliedRules ?? [];
+    flow.error = rec.error ? new FlowError(rec.error.msg, rec.error.timestamp) : null;
+    const r = rec.request;
+    flow.request.scheme = r.scheme;
+    flow.request.host = r.host;
+    flow.request.port = r.port;
+    flow.request.method = r.method;
+    flow.request.path = r.path;
+    flow.request.httpVersion = r.httpVersion;
+    flow.request.headers = new Headers(r.headers);
+    flow.request.body = r.body ? Buffer.from(r.body, "base64") : null;
+    flow.request.bodyTruncated = r.bodyTruncated;
+    flow.request.timestampStart = r.timestampStart;
+    flow.request.timestampEnd = r.timestampEnd;
+    if (rec.response) {
+      const res = new CnResponse();
+      res.statusCode = rec.response.statusCode;
+      res.reason = rec.response.reason;
+      res.httpVersion = rec.response.httpVersion;
+      res.headers = new Headers(rec.response.headers);
+      res.body = rec.response.body ? Buffer.from(rec.response.body, "base64") : null;
+      res.bodyTruncated = rec.response.bodyTruncated;
+      res.timestampStart = rec.response.timestampStart;
+      res.timestampEnd = rec.response.timestampEnd;
+      flow.response = res;
+    }
+    flow.websocketMessages = rec.websocketMessages.map((m) => ({
+      fromClient: m.fromClient,
+      type: m.type,
+      content: Buffer.from(m.content, "base64"),
+      timestamp: m.timestamp,
+    }));
+    return flow;
   }
 
   /** Serializable summary for the flow list (no bodies). */
@@ -182,6 +271,42 @@ export class Flow {
       comment: this.comment,
     };
   }
+}
+
+export interface FlowRecord {
+  id: string;
+  type: FlowType;
+  timestampCreated: number;
+  marked: boolean;
+  comment: string;
+  mocked: boolean;
+  appliedRules: string[];
+  error: { msg: string; timestamp: number } | null;
+  client: ClientInfo;
+  request: {
+    scheme: "http" | "https";
+    host: string;
+    port: number;
+    method: string;
+    path: string;
+    httpVersion: string;
+    headers: [string, string][];
+    body: string | null;
+    bodyTruncated: boolean;
+    timestampStart: number;
+    timestampEnd: number;
+  };
+  response: {
+    statusCode: number;
+    reason: string;
+    httpVersion: string;
+    headers: [string, string][];
+    body: string | null;
+    bodyTruncated: boolean;
+    timestampStart: number;
+    timestampEnd: number;
+  } | null;
+  websocketMessages: { fromClient: boolean; type: "text" | "binary"; content: string; timestamp: number }[];
 }
 
 export interface FlowSummary {

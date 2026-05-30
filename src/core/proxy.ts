@@ -33,6 +33,7 @@ import { handleH2Stream } from "./h2-handler.ts";
 import { relayWebSocket } from "./websocket.ts";
 import { peekRequestHead } from "./head-parser.ts";
 import { negotiateSocks } from "./socks.ts";
+import { saveSession, loadSession, listSessions } from "../flow/session.ts";
 import { log } from "../logger.ts";
 
 interface ConnMeta {
@@ -88,6 +89,24 @@ export class ProxyServer {
     const source = this.store.get(flowId);
     if (!source) return null;
     return replayFlow(this.ctx, source);
+  }
+
+  /** Persist the current capture to a named session file; returns the path. */
+  saveSession(name: string): string {
+    return saveSession(this.options.get("dataDir"), name, this.store.list());
+  }
+
+  /** List saved sessions (newest first). */
+  listSessions() {
+    return listSessions(this.options.get("dataDir"));
+  }
+
+  /** Replace the in-memory capture with a saved session; returns the number of flows loaded. */
+  loadSession(nameOrPath: string): number {
+    const flows = loadSession(this.options.get("dataDir"), nameOrPath);
+    this.store.clear();
+    for (const f of flows) this.store.add(f);
+    return flows.length;
   }
 
   async start(): Promise<void> {
