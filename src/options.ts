@@ -29,8 +29,10 @@ export interface CnProxyOptions {
   upstream: string | null;
   /** Data directory (CA, config). */
   dataDir: string;
-  /** Intercept filter expression — flows matching are paused for manual edit. Empty = off. */
+  /** Request-phase intercept filter — matching flows pause before going upstream. Empty = off. */
   intercept: string;
+  /** Response-phase intercept filter — matching flows pause before relaying to the client. */
+  interceptResponse: string;
   /** Rule source text (whistle-style), applied to every flow. */
   rules: string;
   /** Connection timeout (ms) for upstream requests. */
@@ -52,6 +54,7 @@ export const DEFAULT_OPTIONS: CnProxyOptions = {
   upstream: null,
   dataDir: join(homedir(), ".cnproxy"),
   intercept: "",
+  interceptResponse: "",
   rules: "",
   timeout: 60_000,
   openBrowser: false,

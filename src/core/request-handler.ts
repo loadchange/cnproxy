@@ -170,8 +170,19 @@ export async function handleRequest(
     ctx.rules.applyResponse(flow);
     await ctx.addons.trigger("response", flow);
 
-    // If a rule/addon changed the (decoded) body, send the modified bytes with the encoding
-    // header stripped so the client reads them straight. Otherwise relay the original wire bytes.
+    // ---- response-phase breakpoint ----
+    if (ctx.interceptResponseMatch()(flow)) {
+      ctx.store.update(flow, "intercept");
+      const action = await flow.intercept();
+      ctx.store.update(flow);
+      if (action === "kill") {
+        sock.destroy();
+        return;
+      }
+    }
+
+    // If a rule/addon (or a breakpoint edit) changed the (decoded) body, send the modified bytes
+    // with the encoding header stripped so the client reads them straight. Else relay the original.
     const modified = !!res.body && !decoded.equals(res.body);
     if (modified) {
       res.headers.delete("content-encoding");

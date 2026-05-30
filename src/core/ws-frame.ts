@@ -9,6 +9,33 @@ export interface ParsedMessage {
   data: Buffer;
 }
 
+/**
+ * Encode a single (unfragmented) WebSocket frame. Client→server frames MUST be masked per
+ * RFC 6455; server→client frames MUST NOT be. Used to inject messages into a live connection.
+ */
+export function encodeFrame(data: Buffer, opts: { masked: boolean; opcode?: number }): Buffer {
+  const opcode = opts.opcode ?? (isProbablyText(data) ? 0x1 : 0x2);
+  const len = data.length;
+  const header: number[] = [0x80 | opcode]; // FIN + opcode
+  let lenBytes: number[];
+  if (len < 126) lenBytes = [len];
+  else if (len < 65536) lenBytes = [126, (len >> 8) & 0xff, len & 0xff];
+  else lenBytes = [127, 0, 0, 0, 0, (len >>> 24) & 0xff, (len >> 16) & 0xff, (len >> 8) & 0xff, len & 0xff];
+  header.push((opts.masked ? 0x80 : 0) | lenBytes[0]!);
+  header.push(...lenBytes.slice(1));
+  if (!opts.masked) return Buffer.concat([Buffer.from(header), data]);
+  // Deterministic-but-arbitrary mask key (randomness is unavailable in some runtimes here).
+  const mask = Buffer.from([0xa1, 0xb2, 0xc3, 0xd4]);
+  const masked = Buffer.alloc(len);
+  for (let i = 0; i < len; i++) masked[i] = data[i]! ^ mask[i & 3]!;
+  return Buffer.concat([Buffer.from(header), mask, masked]);
+}
+
+function isProbablyText(b: Buffer): boolean {
+  for (const byte of b) if (byte === 0 || (byte < 0x09 && byte !== 0x0a && byte !== 0x0d)) return false;
+  return true;
+}
+
 export class WsFrameParser {
   private buf: Buffer = Buffer.alloc(0);
   private fragments: Buffer[] = [];

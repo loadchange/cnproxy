@@ -134,6 +134,16 @@ export async function handleH2Stream(
     ctx.rules.applyResponse(flow);
     await ctx.addons.trigger("response", flow);
 
+    if (ctx.interceptResponseMatch()(flow)) {
+      ctx.store.update(flow, "intercept");
+      const action = await flow.intercept();
+      ctx.store.update(flow);
+      if (action === "kill") {
+        stream.close(NGHTTP2_CANCEL);
+        return;
+      }
+    }
+
     // Modified (decoded) bodies are sent decoded with the encoding stripped; untouched bodies are
     // sent verbatim with the original encoding header intact.
     const modified = !!res.body && !decoded.equals(res.body);

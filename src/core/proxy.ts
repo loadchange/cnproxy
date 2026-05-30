@@ -30,7 +30,7 @@ import { CertificateAuthority } from "../cert/ca.ts";
 import { createContext, type ProxyContext } from "./context.ts";
 import { handleRequest, replayFlow } from "./request-handler.ts";
 import { handleH2Stream } from "./h2-handler.ts";
-import { relayWebSocket } from "./websocket.ts";
+import { relayWebSocket, injectWsMessage } from "./websocket.ts";
 import { peekRequestHead } from "./head-parser.ts";
 import { negotiateSocks } from "./socks.ts";
 import { saveSession, loadSession, listSessions } from "../flow/session.ts";
@@ -89,6 +89,11 @@ export class ProxyServer {
     const source = this.store.get(flowId);
     if (!source) return null;
     return replayFlow(this.ctx, source);
+  }
+
+  /** Inject a message into a live WebSocket flow (toServer=true → toward origin, masked). */
+  injectWs(flowId: string, data: Buffer, toServer: boolean): boolean {
+    return injectWsMessage(this.ctx, flowId, data, toServer);
   }
 
   /** Persist the current capture to a named session file; returns the path. */

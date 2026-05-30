@@ -13,8 +13,29 @@ import type { ProxyContext } from "./context.ts";
 import type { PeekedRequest } from "./head-parser.ts";
 import { Flow, type ClientInfo } from "../flow/flow.ts";
 import { Headers } from "../flow/headers.ts";
-import { WsFrameParser } from "./ws-frame.ts";
+import { WsFrameParser, encodeFrame } from "./ws-frame.ts";
 import { log } from "../logger.ts";
+
+/** Live WebSocket relays, keyed by flow id, so the API can inject messages into them. */
+const liveSockets = new Map<string, { client: Duplex; upstream: Duplex }>();
+
+/**
+ * Inject a message into a live WebSocket flow. `toServer` sends toward the origin (masked, as a
+ * client must), otherwise toward the browser (unmasked). Records it in the flow. Returns false if
+ * the flow isn't an active websocket.
+ */
+export function injectWsMessage(ctx: ProxyContext, flowId: string, data: Buffer, toServer: boolean): boolean {
+  const live = liveSockets.get(flowId);
+  if (!live) return false;
+  const frame = encodeFrame(data, { masked: toServer });
+  (toServer ? live.upstream : live.client).write(frame);
+  const flow = ctx.store.get(flowId);
+  if (flow) {
+    flow.websocketMessages.push({ fromClient: toServer, type: "text", content: data, timestamp: ctx.now() });
+    ctx.store.update(flow);
+  }
+  return true;
+}
 
 export function relayWebSocket(
   ctx: ProxyContext,
@@ -57,6 +78,7 @@ export function relayWebSocket(
       : net.connect({ host: target.host, port: target.port });
 
   const teardown = () => {
+    liveSockets.delete(flow.id);
     clientSocket.destroy();
     upstream.destroy();
     ctx.store.update(flow);
@@ -81,6 +103,7 @@ export function relayWebSocket(
     }
 
     ctx.addons.trigger("websocketStart", flow).catch(() => {});
+    liveSockets.set(flow.id, { client: clientSocket, upstream });
 
     const clientParser = new WsFrameParser();
     const serverParser = new WsFrameParser();

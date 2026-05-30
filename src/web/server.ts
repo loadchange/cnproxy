@@ -201,6 +201,11 @@ export class WebInspector {
             const replayed = await this.proxy.replay(id);
             return json({ ok: !!replayed, id: replayed?.id ?? null });
           }
+          case "ws-send": {
+            const body = (await req.json().catch(() => ({}))) as { text?: string; toServer?: boolean };
+            const ok = this.proxy.injectWs(id, Buffer.from(body.text ?? "", "utf8"), !!body.toServer);
+            return json({ ok });
+          }
         }
       }
     }
