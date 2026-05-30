@@ -16,9 +16,17 @@ export interface UpstreamConfig {
   timeout: number;
 }
 
-export function sendUpstream(req: CnRequest, cfg: UpstreamConfig): Promise<IncomingMessage> {
+/** Per-stage timing offsets (ms from request start). Populated when a collector is passed. */
+export interface Timings {
+  dns?: number;
+  connect?: number;
+  tls?: number;
+  ttfb?: number;
+}
+
+export function sendUpstream(req: CnRequest, cfg: UpstreamConfig, timings?: Timings): Promise<IncomingMessage> {
   if (cfg.upstream) return sendViaProxy(req, cfg);
-  return sendDirect(req, cfg);
+  return sendDirect(req, cfg, timings);
 }
 
 function buildHeaders(req: CnRequest): http.OutgoingHttpHeaders {
@@ -34,7 +42,7 @@ function buildHeaders(req: CnRequest): http.OutgoingHttpHeaders {
   return headers;
 }
 
-function sendDirect(req: CnRequest, cfg: UpstreamConfig): Promise<IncomingMessage> {
+function sendDirect(req: CnRequest, cfg: UpstreamConfig, timings?: Timings): Promise<IncomingMessage> {
   const isHttps = req.scheme === "https";
   const mod = isHttps ? https : http;
   const options: https.RequestOptions = {
@@ -48,16 +56,28 @@ function sendDirect(req: CnRequest, cfg: UpstreamConfig): Promise<IncomingMessag
     rejectUnauthorized: false,
     servername: isHttps && net.isIP(req.host) === 0 ? req.host : undefined,
   };
-  return dispatch(mod, options, req);
+  return dispatch(mod, options, req, timings);
 }
 
 function dispatch(
   mod: typeof http | typeof https,
   options: https.RequestOptions,
   req: CnRequest,
+  timings?: Timings,
 ): Promise<IncomingMessage> {
   return new Promise((resolve, reject) => {
-    const outReq = mod.request(options, resolve);
+    const start = Date.now();
+    const outReq = mod.request(options, (res) => {
+      if (timings) timings.ttfb = Date.now() - start;
+      resolve(res);
+    });
+    if (timings) {
+      outReq.on("socket", (socket) => {
+        socket.on("lookup", () => (timings.dns = Date.now() - start));
+        socket.on("connect", () => (timings.connect = Date.now() - start));
+        socket.on("secureConnect", () => (timings.tls = Date.now() - start));
+      });
+    }
     outReq.on("error", reject);
     outReq.on("timeout", () => outReq.destroy(new Error("upstream timeout")));
     if (req.body && req.body.length) outReq.write(req.body);

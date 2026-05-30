@@ -3,8 +3,8 @@
  * Fiddler all read/write it). Lets users hand a captured session to any other tool. Bodies are
  * already stored decoded, so the HAR `content.text` is human-readable.
  */
-import type { Flow } from "./flow.ts";
-import type { Headers } from "./headers.ts";
+import { Flow, CnResponse } from "./flow.ts";
+import { Headers } from "./headers.ts";
 
 interface HarNameValue {
   name: string;
@@ -105,4 +105,52 @@ export function flowsToHar(flows: Flow[], version: string): object {
       entries: flows.filter((f) => f.type === "http").map(entry),
     },
   };
+}
+
+/** Parse a HAR log into flows so a session captured elsewhere can be opened here. */
+export function harToFlows(har: any): Flow[] {
+  const entries = har?.log?.entries;
+  if (!Array.isArray(entries)) return [];
+  const out: Flow[] = [];
+  for (const e of entries) {
+    const f = harEntryToFlow(e);
+    if (f) out.push(f);
+  }
+  return out;
+}
+
+function harEntryToFlow(e: any): Flow | null {
+  const req = e?.request;
+  if (!req?.url) return null;
+  let u: URL;
+  try {
+    u = new URL(req.url);
+  } catch {
+    return null;
+  }
+  const ts = Date.parse(e.startedDateTime) || 0;
+  const flow = new Flow({ address: "har", port: 0, tls: u.protocol === "https:" }, ts);
+  flow.request.scheme = u.protocol === "https:" ? "https" : "http";
+  flow.request.host = u.hostname;
+  flow.request.port = u.port ? parseInt(u.port, 10) : flow.request.scheme === "https" ? 443 : 80;
+  flow.request.method = req.method || "GET";
+  flow.request.path = u.pathname + u.search;
+  flow.request.headers = new Headers((req.headers ?? []).map((h: HarNameValue) => [h.name, h.value] as [string, string]));
+  if (req.postData?.text) flow.request.body = Buffer.from(req.postData.text, "utf8");
+  flow.request.timestampStart = ts;
+  flow.request.timestampEnd = ts;
+
+  const r = e?.response;
+  if (r && typeof r.status === "number" && r.status > 0) {
+    const res = new CnResponse();
+    res.statusCode = r.status;
+    res.reason = r.statusText || "";
+    res.headers = new Headers((r.headers ?? []).map((h: HarNameValue) => [h.name, h.value] as [string, string]));
+    if (r.content?.text) res.body = Buffer.from(r.content.text, "utf8");
+    res.timestampStart = ts;
+    res.timestampEnd = ts + (e.time || 0);
+    flow.response = res;
+  }
+  flow.comment = "imported from HAR";
+  return flow;
 }

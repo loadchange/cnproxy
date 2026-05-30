@@ -125,6 +125,19 @@ export class WebInspector {
       });
     }
 
+    if (pathname === "/api/import/har" && req.method === "POST") {
+      const har = await req.json().catch(() => null);
+      const count = this.proxy.importHar(har);
+      return json({ ok: true, flows: count });
+    }
+
+    if (pathname === "/api/flows/replay-batch" && req.method === "POST") {
+      const body = (await req.json().catch(() => ({}))) as { ids?: string[] };
+      const ids = Array.isArray(body.ids) ? body.ids : [];
+      const replayed = await Promise.all(ids.map((id) => this.proxy.replay(id)));
+      return json({ ok: true, replayed: replayed.filter(Boolean).length });
+    }
+
     if (pathname === "/api/clear" && req.method === "POST") {
       store.clear();
       return json({ ok: true });

@@ -34,6 +34,7 @@ import { relayWebSocket, injectWsMessage } from "./websocket.ts";
 import { peekRequestHead } from "./head-parser.ts";
 import { negotiateSocks } from "./socks.ts";
 import { saveSession, loadSession, listSessions } from "../flow/session.ts";
+import { harToFlows } from "../flow/har.ts";
 import { log } from "../logger.ts";
 
 interface ConnMeta {
@@ -104,6 +105,13 @@ export class ProxyServer {
   /** List saved sessions (newest first). */
   listSessions() {
     return listSessions(this.options.get("dataDir"));
+  }
+
+  /** Import a HAR log into the store (appends). Returns the number of flows added. */
+  importHar(har: unknown): number {
+    const flows = harToFlows(har);
+    for (const f of flows) this.store.add(f);
+    return flows.length;
   }
 
   /** Replace the in-memory capture with a saved session; returns the number of flows loaded. */

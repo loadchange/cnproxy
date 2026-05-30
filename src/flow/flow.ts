@@ -88,6 +88,8 @@ export class Flow {
   appliedRules: string[] = [];
   /** True when this flow's response was synthesized (mocked) rather than fetched. */
   mocked = false;
+  /** Per-stage upstream timing offsets in ms (dns/connect/tls/ttfb), when measured. */
+  timings: { dns?: number; connect?: number; tls?: number; ttfb?: number } | null = null;
 
   // interception
   intercepted = false;
@@ -274,6 +276,7 @@ export class Flow {
       })),
       client: this.client,
       comment: this.comment,
+      timings: this.timings,
     };
   }
 }
@@ -356,4 +359,5 @@ export interface FlowDetail extends FlowSummary {
   websocketMessages: { fromClient: boolean; type: string; content: string; timestamp: number }[];
   client: ClientInfo;
   comment: string;
+  timings: { dns?: number; connect?: number; tls?: number; ttfb?: number } | null;
 }

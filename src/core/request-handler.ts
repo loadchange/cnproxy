@@ -14,7 +14,7 @@ import type { ProxyContext } from "./context.ts";
 import { Flow, CnResponse, FlowError, type ClientInfo } from "../flow/flow.ts";
 import { Headers } from "../flow/headers.ts";
 import { collectBody, boundForStorage } from "./stream-util.ts";
-import { sendUpstream } from "./upstream.ts";
+import { sendUpstream, type Timings } from "./upstream.ts";
 import { decodeBody, isDecodable } from "./encoding.ts";
 import { log } from "../logger.ts";
 
@@ -125,10 +125,13 @@ export async function handleRequest(
     }
 
     // ---- upstream ----
-    const upstreamRes = await sendUpstream(flow.request, {
-      upstream: ctx.options.get("upstream"),
-      timeout: ctx.options.get("timeout"),
-    });
+    const timings: Timings = {};
+    const upstreamRes = await sendUpstream(
+      flow.request,
+      { upstream: ctx.options.get("upstream"), timeout: ctx.options.get("timeout") },
+      timings,
+    );
+    flow.timings = timings;
 
     const res = new CnResponse();
     res.statusCode = upstreamRes.statusCode ?? 0;
