@@ -53,6 +53,35 @@ Legend: ✅ done · ⚠️ partial · ❌ missing/out-of-scope
 | Request history | ✅ | composed requests are recorded flows + sessions. |
 | cURL import / export | ✅ | parseCurl + generateCode("curl"). |
 
+## Known engine gaps (honest re-audit — not yet closed)
+
+These are real correctness/perf gaps surfaced by a critical re-review, distinct from the
+"out of scope" list below:
+
+- **HTTP/2 to origin** — client-side h2 works, but upstream is always HTTP/1.1. h2-only origins,
+  gRPC, and server-push aren't proxied end-to-end.
+- **Streaming on the h2 path** — SSE/large responses stream on HTTP/1 but are buffered on h2.
+- **Request bodies are fully buffered** (h1 + h2) — no streaming uploads; large uploads sit in memory.
+- **No upstream connection reuse / keep-alive** — a new socket per request.
+- **WebSocket**: no `permessage-deflate` decode (compressed frames show as garbage), control
+  frames (ping/pong/close) aren't surfaced, and RFC 8441 (WS over h2) is unhandled.
+- **Request-body content-encoding** isn't decoded for capture/filter (only responses are).
+- **Certificates**: upstream is always accepted (`rejectUnauthorized:false`) — no cert problem
+  reporting, pinning detection, or mutual-TLS analysis.
+- **Persistence is manual** (save/load); no auto-save / load-on-start "recording history".
+- **map-local** prefix-strip only applies to `/`-leading path patterns, not `domain/path`.
+- **SOCKS5 is NO-AUTH only**; IPv6 literals are parsed but untested against a real v6 origin.
+- **Test realism**: HTTP/2 is tested against an HTTP/1 origin (never h2→h2); suites are mostly
+  local happy-paths with no concurrency / malformed-input / load coverage.
+
+## UI / productization
+
+The web inspector now wires the composer, sessions (save/load), HAR import, "Copy as"
+code-gen, "Edit & resend", per-stage timing, highlight colors, response-phase breakpoint, an
+inline paused-flow editor, and WebSocket injection. Verified in a real browser. Still missing
+vs Reqable's native GUI: a visual diff view, collections/environments management UI, auth
+helper forms, batch-edit, and the overall polish of a native multi-platform app.
+
 ## Structurally out of scope (not "features" of this codebase)
 
 Native multi-platform desktop GUI and iOS/Android apps; an embedded Python scripting runtime
