@@ -4,7 +4,6 @@
  * Serves a single-page UI for browsing captured traffic, à la whistle/Reqable.
  */
 
-import { join } from "node:path";
 import type { Server, ServerWebSocket } from "bun";
 import type { ProxyServer } from "../core/proxy.ts";
 import type { Flow } from "../flow/flow.ts";
@@ -15,7 +14,17 @@ import { diffFlows } from "../api/diff.ts";
 import type { Workspace } from "../api/workspace.ts";
 import { log } from "../logger.ts";
 
-const UI_DIR = join(import.meta.dir, "ui");
+// UI assets are embedded as text so a `bun build --compile` single-file binary is self-contained
+// (no on-disk UI directory needed at runtime — works on every platform Bun can target).
+import indexHtml from "./ui/index.html" with { type: "text" };
+import appJs from "./ui/app.js" with { type: "text" };
+import styleCss from "./ui/style.css" with { type: "text" };
+
+const UI_ASSETS: Record<string, { body: string; type: string }> = {
+  "index.html": { body: indexHtml, type: "text/html; charset=utf-8" },
+  "app.js": { body: appJs, type: "application/javascript; charset=utf-8" },
+  "style.css": { body: styleCss, type: "text/css; charset=utf-8" },
+};
 
 interface WsData {
   id: number;
@@ -89,10 +98,10 @@ export class WebInspector {
   private async handleHttp(req: Request, url: URL): Promise<Response> {
     const { pathname } = url;
 
-    // ---- static assets ----
-    if (pathname === "/" || pathname === "/index.html") return file("index.html", "text/html; charset=utf-8");
-    if (pathname === "/app.js") return file("app.js", "application/javascript; charset=utf-8");
-    if (pathname === "/style.css") return file("style.css", "text/css; charset=utf-8");
+    // ---- static assets (embedded in the binary) ----
+    const assetName = pathname === "/" ? "index.html" : pathname.slice(1);
+    const asset = UI_ASSETS[assetName];
+    if (asset) return new Response(asset.body, { headers: { "content-type": asset.type } });
 
     // ---- root CA download (one-click trust install) ----
     if (pathname === "/ca.crt" || pathname === "/cnproxy-ca.crt") {
@@ -303,8 +312,4 @@ function json(data: unknown, status = 200): Response {
     status,
     headers: { "content-type": "application/json; charset=utf-8" },
   });
-}
-
-function file(name: string, type: string): Response {
-  return new Response(Bun.file(join(UI_DIR, name)), { headers: { "content-type": type } });
 }

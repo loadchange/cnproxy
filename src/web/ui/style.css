@@ -177,3 +177,17 @@ code { background: var(--bg); padding: 1px 4px; border-radius: 3px; font-family:
 .copyas:hover .copyas-menu { display: block; }
 .copyas-menu a { display: block; padding: 6px 12px; font-size: 12px; cursor: pointer; }
 .copyas-menu a:hover { background: var(--bg-hover); }
+
+/* ---- responsive: usable from a phone/tablet browser (mobile via proxy-config) ---- */
+@media (max-width: 760px) {
+  .toolbar { flex-wrap: wrap; height: auto; padding: 6px 8px; gap: 6px; }
+  .toolbar .filter { order: 10; flex-basis: 100%; }
+  .toolbar .spacer { display: none; }
+  .layout { flex-direction: column; }
+  .list-pane { flex: 1 1 45%; border-right: none; border-bottom: 1px solid var(--border); }
+  .detail-pane { flex: 1 1 55%; }
+  .drawer, .drawer.small, #composeDrawer { top: auto; bottom: 0; left: 0; right: 0; width: 100%; max-width: 100%; height: 70vh; }
+  .compose-grid { grid-template-rows: 1fr 1fr; }
+  /* drop lower-value columns on small screens */
+  .c-type, .c-size { display: none; }
+}

@@ -103,6 +103,25 @@ cnproxy ca [--export <file>]   Show or export the root CA certificate
   -v, --verbose         Debug logging
 ```
 
+## Cross-platform builds
+
+cnproxy compiles to a **single self-contained executable** (Bun + the embedded web UI) that runs
+without Bun installed:
+
+```bash
+bun run build              # native binary for the current platform → dist/cnproxy
+bun run build:all          # macOS (arm64/x64), Linux (x64/arm64), Windows (x64) → dist/
+```
+
+Per-target scripts: `build:macos-arm64`, `build:macos-x64`, `build:linux-x64`,
+`build:linux-arm64`, `build:windows-x64`. The web inspector assets are embedded in the binary,
+so the same executable is the whole product on each desktop/server platform.
+
+**Mobile / other devices:** point the device's Wi-Fi/system proxy (or SOCKS5) at the machine
+running cnproxy, trust the CA once, and open the (responsive) inspector at
+`http://<host>:8889` from the device's browser. A dedicated native mobile app (on-device
+VPN capture) is a separate effort and is *not* part of this codebase — see `docs/ROADMAP.md`.
+
 ## Rules
 
 One rule per line: `pattern operator://value`. Comments start with `#`.

@@ -82,12 +82,27 @@ inline paused-flow editor, and WebSocket injection. Verified in a real browser. 
 vs Reqable's native GUI: a visual diff view, collections/environments management UI, auth
 helper forms, batch-edit, and the overall polish of a native multi-platform app.
 
+## Multi-platform delivery ("各种端")
+
+Reqable ships native apps on Windows/Mac/Linux + iOS/Android. cnproxy's story:
+
+- **Desktop / server (Win/Mac/Linux, x64+arm64)** ✅ — `bun build --compile` produces a single
+  self-contained executable per platform with the web UI embedded (no Bun needed at runtime).
+  `bun run build:all`. Verified: the macOS binary runs from any directory, serves the embedded
+  UI, and proxies.
+- **Any device with a browser (incl. mobile)** ✅ via proxy-config — point the device's
+  Wi-Fi/SOCKS proxy at the host and open the responsive inspector in the device browser
+  (Reqable's "collaborative mode" without a custom app).
+- **Native desktop *window*** ⚠️ — currently a browser tab, not a Tauri/Electron-wrapped window.
+  A thin webview wrapper is a feasible follow-up.
+- **Native mobile apps (on-device VPN capture)** ❌ — a separate Swift/Kotlin codebase; not
+  achievable inside a Bun/TS project. Out of scope here.
+
 ## Structurally out of scope (not "features" of this codebase)
 
-Native multi-platform desktop GUI and iOS/Android apps; an embedded Python scripting runtime
-(cnproxy exposes a TypeScript addon API instead); HTTP/3 (QUIC); OS-level traffic-source
-attribution; deep pinned-cert / mutual-TLS analysis. cnproxy ships a web inspector + REST/WS
-control plane rather than a Flutter/C++ native client.
+A Flutter/C++ native multi-platform client and on-device mobile VPN-capture apps; an embedded
+Python scripting runtime (cnproxy exposes a TypeScript addon API instead); HTTP/3 (QUIC);
+OS-level traffic-source attribution; deep pinned-cert / mutual-TLS analysis.
 
 ## Test coverage
 
