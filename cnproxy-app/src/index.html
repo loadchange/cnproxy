@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>cnproxy — traffic inspector</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header class="toolbar">
+      <div class="brand"><span class="logo">⚡</span> cnproxy</div>
+      <div class="status" id="status">connecting…</div>
+      <input id="filter" class="filter" placeholder="filter: ~m POST &amp; ~u /api  |  example.com" spellcheck="false" />
+      <div class="spacer"></div>
+      <label class="toggle"><input type="checkbox" id="decrypt" /> decrypt HTTPS</label>
+      <button id="composeBtn" class="btn primary">Compose</button>
+      <button id="rulesBtn" class="btn">Rules</button>
+      <button id="interceptBtn" class="btn">Intercept</button>
+      <button id="sessionsBtn" class="btn">Sessions</button>
+      <button id="workspaceBtn" class="btn">Workspace</button>
+      <button id="clearBtn" class="btn">Clear</button>
+      <label class="btn" for="importHar">Import HAR</label>
+      <input id="importHar" type="file" accept=".har,application/json" hidden />
+      <a class="btn" href="/api/export/har" download>Export HAR</a>
+      <a class="btn" href="/ca.crt" download>CA cert</a>
+    </header>
+
+    <main class="layout">
+      <section class="list-pane">
+        <table class="flow-table">
+          <thead>
+            <tr>
+              <th class="c-status">#</th>
+              <th class="c-method">Method</th>
+              <th class="c-host">Host</th>
+              <th class="c-path">Path</th>
+              <th class="c-type">Type</th>
+              <th class="c-size">Size</th>
+              <th class="c-time">Time</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </section>
+
+      <section class="detail-pane" id="detail">
+        <div class="empty">Select a request to inspect it.</div>
+      </section>
+    </main>
+
+    <!-- Rules editor drawer -->
+    <div class="drawer" id="rulesDrawer" hidden>
+      <div class="drawer-head">
+        <strong>Rules</strong>
+        <span class="hint">one per line — <code>pattern operator://value</code></span>
+        <div class="spacer"></div>
+        <button id="rulesSave" class="btn primary">Apply</button>
+        <button id="rulesClose" class="btn">Close</button>
+      </div>
+      <textarea id="rulesText" class="code" spellcheck="false" placeholder="# examples (quote filter patterns that contain spaces)
+example.com host://127.0.0.1
+/api/user mock://{&quot;id&quot;:1,&quot;name&quot;:&quot;mock&quot;}
+*.ads.com block://
+&quot;~u jquery&quot; resReplace://s/console.log/void 0/
+api.example.com reqHeaders://{&quot;x-debug&quot;:&quot;1&quot;}"></textarea>
+    </div>
+
+    <!-- Intercept drawer -->
+    <div class="drawer small" id="interceptDrawer" hidden>
+      <div class="drawer-head">
+        <strong>Intercept filter</strong>
+        <span class="hint">flows matching pause for resume/kill. Empty = off.</span>
+        <div class="spacer"></div>
+        <button id="interceptSave" class="btn primary">Apply</button>
+        <button id="interceptClose" class="btn">Close</button>
+      </div>
+      <input id="interceptText" class="code" placeholder="~m POST &amp; ~u /checkout" />
+      <div class="drawer-head" style="margin-top:8px">
+        <span class="hint">Response breakpoint — pause before relaying to the client:</span>
+      </div>
+      <input id="interceptResText" class="code" placeholder="~c 500  (empty = off)" />
+    </div>
+
+    <!-- Sessions drawer -->
+    <div class="drawer small" id="sessionsDrawer" hidden>
+      <div class="drawer-head">
+        <strong>Sessions</strong>
+        <span class="hint">save / reload captured traffic</span>
+        <div class="spacer"></div>
+        <input id="sessionName" class="code" style="width:160px" placeholder="name" />
+        <button id="sessionSave" class="btn primary">Save</button>
+        <button id="sessionsClose" class="btn">Close</button>
+      </div>
+      <div id="sessionList" class="session-list"></div>
+    </div>
+
+    <!-- Composer drawer (API testing) -->
+    <div class="drawer" id="composeDrawer" hidden>
+      <div class="drawer-head">
+        <strong>Compose</strong>
+        <select id="cMethod" class="code">
+          <option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option><option>HEAD</option><option>OPTIONS</option>
+        </select>
+        <input id="cUrl" class="code" style="flex:1" placeholder="https://api.example.com/v1/items  (supports {{env}})" />
+        <button id="cSend" class="btn primary">Send</button>
+        <button id="composeClose" class="btn">Close</button>
+      </div>
+      <!-- Auth Helper Row -->
+      <div class="auth-helper-row">
+        <label>Auth:</label>
+        <select id="cAuthType" class="code">
+          <option value="none">None</option>
+          <option value="bearer">Bearer Token</option>
+          <option value="basic">Basic Auth</option>
+          <option value="apikey">API Key</option>
+        </select>
+        <div id="authFields" class="auth-fields"></div>
+        <button id="cApplyAuth" class="btn small primary">Apply Auth</button>
+      </div>
+      <div class="compose-grid">
+        <textarea id="cHeaders" class="code" spellcheck="false" placeholder="headers, one per line:&#10;authorization: Bearer {{TOKEN}}&#10;content-type: application/json"></textarea>
+        <textarea id="cBody" class="code" spellcheck="false" placeholder="request body"></textarea>
+      </div>
+      <div class="drawer-head">
+        <input id="cCurl" class="code" style="flex:1" placeholder="paste a curl command and click Import" />
+        <button id="cImport" class="btn">Import cURL</button>
+        <div class="spacer"></div>
+        <span id="cResult" class="hint"></span>
+      </div>
+    </div>
+
+    <!-- Workspace drawer (Collections + Environments) -->
+    <div class="drawer" id="workspaceDrawer" hidden>
+      <div class="drawer-head">
+        <strong>Workspace</strong>
+        <div class="spacer"></div>
+        <button id="workspaceClose" class="btn">Close</button>
+      </div>
+      <div class="workspace-layout">
+        <div class="workspace-pane">
+          <h3>Environments</h3>
+          <div class="env-controls">
+            <select id="envSelect" class="code"></select>
+            <button id="envNewBtn" class="btn small">New</button>
+            <button id="envDelBtn" class="btn small">Delete</button>
+          </div>
+          <textarea id="envVariables" class="code" placeholder="VAR_NAME=value&#10;TOKEN=bearer-token-123" spellcheck="false" style="height: 120px; flex: none;"></textarea>
+          <button id="envSaveBtn" class="btn primary small" style="margin-top: 4px; align-self: flex-end;">Save Environment</button>
+        </div>
+        <div class="workspace-pane">
+          <h3>Collections</h3>
+          <div id="collectionsList" class="collections-list"></div>
+          <div class="collections-controls" style="margin-top:8px">
+            <button id="cSaveToCollection" class="btn small primary">Save Composer Request</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Diff Modal -->
+    <div class="modal-overlay" id="diffModal" hidden>
+      <div class="modal-content">
+        <div class="modal-head">
+          <strong>⚖ Visual Flow Diff</strong>
+          <div class="spacer"></div>
+          <button id="diffClose" class="btn">Close</button>
+        </div>
+        <div class="diff-selection">
+          <select id="diffSelectA" class="code" style="flex: 1;"></select>
+          <span style="color: var(--text-dim);">vs</span>
+          <select id="diffSelectB" class="code" style="flex: 1;"></select>
+          <button id="diffCompareBtn" class="btn primary">Compare</button>
+        </div>
+        <div class="diff-body">
+          <div class="diff-column">
+            <h4>Request Diff</h4>
+            <div id="diffRequest" class="diff-pane-content"></div>
+          </div>
+          <div class="diff-column">
+            <h4>Response Diff</h4>
+            <div id="diffResponse" class="diff-pane-content"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
