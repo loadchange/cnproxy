@@ -11,6 +11,7 @@ import type { Flow } from "../flow/flow.ts";
 import { Headers } from "../flow/headers.ts";
 import { flowsToHar } from "../flow/har.ts";
 import { parseCurl, generateCode, type RequestSpec, type CodeLang } from "../api/composer.ts";
+import { diffFlows } from "../api/diff.ts";
 import type { Workspace } from "../api/workspace.ts";
 import { log } from "../logger.ts";
 
@@ -150,6 +151,12 @@ export class WebInspector {
     if (pathname === "/api/curl/parse" && req.method === "POST") {
       const body = (await req.json().catch(() => ({}))) as { command?: string };
       return json(parseCurl(body.command ?? ""));
+    }
+    if (pathname === "/api/diff" && req.method === "GET") {
+      const a = store.get(url.searchParams.get("a") ?? "");
+      const b = store.get(url.searchParams.get("b") ?? "");
+      if (!a || !b) return json({ error: "both flow ids required" }, 404);
+      return json(diffFlows(a, b));
     }
     if (pathname === "/api/workspace") {
       if (req.method === "GET") return json(this.proxy.loadWorkspace());

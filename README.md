@@ -27,6 +27,15 @@ single fast, dependency-light Bun binary with a clean inspector UI inspired by
 - **Full MITM** of HTTP/1.1, **HTTP/2**, HTTPS, WebSocket and secure WebSocket (wss), with an
   automatically generated root CA and per-host certificates minted on demand (SNI). HTTP/2 is
   negotiated via ALPN and decoded into the same flow model as HTTP/1.
+- **HTTP proxy *and* SOCKS5/SOCKS4** on the same port (auto-detected), both feeding the same
+  capture/decrypt/rules pipeline.
+- **API testing** ("the Postman half"): a request **composer**, environment variables, a
+  **cookie jar**, **cURL import/export**, **code generation** (curl/fetch/python), and a
+  persisted workspace of collections + environments.
+- **Sessions / history** — save, list and reload captures to disk (survives restart);
+  **HAR import/export**; a request/response **diff** tool; per-stage **timing** (DNS/connect/TLS/TTFB).
+- **Breakpoints** on requests *and* responses (resume / kill / edit), plus live **WebSocket
+  message injection**.
 - **Live web inspector** — real-time flow list, request/response headers & bodies, JSON
   pretty-printing, image preview, WebSocket message timeline (streamed over a WebSocket).
 - **Transparent decompression** — `gzip`, `br` and `deflate` responses are captured
@@ -126,6 +135,8 @@ One rule per line: `pattern operator://value`. Comments start with `#`.
 | `resReplace://s/a/b/` | response| string-replace in the response body                   |
 | `delay://<ms>`      | request | add latency                                             |
 | `block://`          | request | abort the connection                                    |
+| `dir://<localdir>`  | request | map a path prefix to a local directory (map-local)      |
+| `highlight://<color>` | request | tag matching flows with a color in the inspector      |
 
 Example rule file (`examples/rules.cnp`):
 
@@ -236,9 +247,18 @@ The inspector also exposes a small REST control plane (served on the web port):
 | `POST /api/flows/:id/edit`     | edit a paused flow's request/response before resume  |
 | `POST /api/flows/:id/replay`   | re-issue the request as a new flow                   |
 | `POST /api/flows/:id/mark`     | toggle the mark flag                                 |
+| `POST /api/flows/:id/ws-send`  | inject a WebSocket message into a live flow          |
+| `GET  /api/flows/:id/code?lang=`| generate a code snippet (curl / fetch / python)     |
+| `POST /api/flows/replay-batch` | replay many flows at once                            |
+| `GET  /api/diff?a=&b=`         | line diff of two flows' request/response             |
 | `GET/POST /api/options`        | read / patch runtime options (rules, intercept, …)   |
 | `GET  /api/stats`              | totals (flows, rules, intercept state)               |
 | `GET  /api/export/har`         | download the session as HAR 1.2                      |
+| `POST /api/import/har`         | import a HAR log into the store                      |
+| `GET  /api/sessions` · `POST /api/sessions/save` · `POST /api/sessions/load` | session history |
+| `POST /api/compose`            | compose & send an arbitrary request (API testing)    |
+| `POST /api/curl/parse`         | parse a cURL command into a request spec             |
+| `GET/PUT /api/workspace`       | collections + environments                           |
 | `POST /api/clear`              | empty the flow store                                 |
 | `GET  /ca.crt`                 | download the root CA certificate                     |
 
