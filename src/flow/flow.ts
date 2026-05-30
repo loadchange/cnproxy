@@ -82,6 +82,8 @@ export class Flow {
   timestampCreated: number;
   marked = false;
   comment = "";
+  /** Highlight color set by a `highlight://` rule (CSS color/name), shown in the UI list. */
+  color = "";
   /** Names of rules that touched this flow (for UI badges). */
   appliedRules: string[] = [];
   /** True when this flow's response was synthesized (mocked) rather than fetched. */
@@ -136,6 +138,7 @@ export class Flow {
       timestampCreated: this.timestampCreated,
       marked: this.marked,
       comment: this.comment,
+      color: this.color,
       mocked: this.mocked,
       appliedRules: this.appliedRules,
       error: this.error ? { msg: this.error.msg, timestamp: this.error.timestamp } : null,
@@ -180,6 +183,7 @@ export class Flow {
     flow.type = rec.type;
     flow.marked = rec.marked;
     flow.comment = rec.comment;
+    flow.color = rec.color ?? "";
     flow.mocked = rec.mocked;
     flow.appliedRules = rec.appliedRules ?? [];
     flow.error = rec.error ? new FlowError(rec.error.msg, rec.error.timestamp) : null;
@@ -233,6 +237,7 @@ export class Flow {
       duration: this.duration,
       timestamp: this.timestampCreated,
       marked: this.marked,
+      color: this.color,
       mocked: this.mocked,
       intercepted: this.intercepted,
       error: this.error?.msg ?? null,
@@ -279,6 +284,7 @@ export interface FlowRecord {
   timestampCreated: number;
   marked: boolean;
   comment: string;
+  color?: string;
   mocked: boolean;
   appliedRules: string[];
   error: { msg: string; timestamp: number } | null;
@@ -324,6 +330,7 @@ export interface FlowSummary {
   duration: number | null;
   timestamp: number;
   marked: boolean;
+  color: string;
   mocked: boolean;
   intercepted: boolean;
   error: string | null;

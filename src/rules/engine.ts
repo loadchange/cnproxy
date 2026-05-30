@@ -18,7 +18,8 @@
  * (mock/file/status/resBody/resHeaders synthesize a response and short-circuit upstream.)
  */
 
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, statSync } from "node:fs";
+import { join, resolve, sep } from "node:path";
 import { compileFilter, type Predicate } from "./filter.ts";
 import type { Flow } from "../flow/flow.ts";
 import { Headers } from "../flow/headers.ts";
@@ -38,6 +39,8 @@ export interface RequestDirective {
 
 interface Rule {
   raw: string;
+  /** The original pattern token (used by dir:// to strip a matched path prefix). */
+  pattern: string;
   match: Predicate;
   op: string;
   value: string;
@@ -45,8 +48,8 @@ interface Rule {
 
 const REQUEST_OPS = new Set([
   "host", "rewrite", "redirect", "reqheaders", "reqtype", "ua", "referer",
-  "reqreplace", "delay", "block", "abort", "file", "mock", "status",
-  "resheaders", "restype", "resbody", "resreplace",
+  "reqreplace", "delay", "block", "abort", "file", "dir", "mock", "status",
+  "resheaders", "restype", "resbody", "resreplace", "highlight",
 ]);
 
 export class RuleEngine {
@@ -115,7 +118,7 @@ export class RuleEngine {
       return null;
     }
 
-    return { raw: line, match: this.compilePattern(pattern), op, value };
+    return { raw: line, pattern, match: this.compilePattern(pattern), op, value };
   }
 
   private compilePattern(pattern: string): Predicate {
@@ -210,6 +213,21 @@ export class RuleEngine {
           }
           break;
         }
+        case "dir": {
+          const r = loadDirMock(rule.value, flow.request.path, rule.pattern);
+          mockStatus = r ? mockStatus || 200 : 404;
+          if (r) {
+            for (const [k, v] of r.headers.entries()) mockHeaders.set(k, v);
+            mockBody = r.body;
+          } else {
+            mockBody = Buffer.from("cnproxy: not found in mapped directory");
+          }
+          hasMock = true;
+          break;
+        }
+        case "highlight":
+          flow.color = rule.value || "yellow";
+          break;
         case "mock":
         case "resbody": {
           const r = resolveBodyValue(rule.value);
@@ -385,6 +403,23 @@ function loadFileMock(path: string): { headers: Headers; body: Buffer } | null {
   const headers = new Headers();
   headers.set("content-type", guessType(p));
   return { headers, body };
+}
+
+/** Map a request path onto a local directory (whistle-style map-local), guarding traversal. */
+function loadDirMock(dir: string, reqPath: string, pattern: string): { headers: Headers; body: Buffer } | null {
+  const base = resolve(dir.replace(/^file:\/\//, ""));
+  let rel = (reqPath.split("?")[0] || "/");
+  // If the rule matched on a path prefix (e.g. `/assets`), serve files relative to that prefix.
+  if (pattern.startsWith("/") && rel.startsWith(pattern)) rel = rel.slice(pattern.length);
+  const pathname = decodeURIComponent(rel.replace(/^\/+/, ""));
+  let target = resolve(join(base, pathname));
+  // Reject path traversal outside the mapped directory.
+  if (target !== base && !target.startsWith(base + sep)) return null;
+  if (existsSync(target) && statSync(target).isDirectory()) target = join(target, "index.html");
+  if (!existsSync(target) || !statSync(target).isFile()) return null;
+  const headers = new Headers();
+  headers.set("content-type", guessType(target));
+  return { headers, body: readFileSync(target) };
 }
 
 function guessType(path: string): string {
