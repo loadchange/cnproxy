@@ -15,6 +15,7 @@
  */
 
 import http from "node:http";
+import http2 from "node:http2";
 import net from "node:net";
 import tls from "node:tls";
 import type { Socket } from "node:net";
@@ -28,6 +29,7 @@ import { RuleEngine } from "../rules/engine.ts";
 import { CertificateAuthority } from "../cert/ca.ts";
 import { createContext, type ProxyContext } from "./context.ts";
 import { handleRequest, replayFlow } from "./request-handler.ts";
+import { handleH2Stream } from "./h2-handler.ts";
 import { relayWebSocket } from "./websocket.ts";
 import { peekRequestHead } from "./head-parser.ts";
 import { log } from "../logger.ts";
@@ -54,6 +56,7 @@ export class ProxyServer {
   private ctx!: ProxyContext;
   private frontServer!: net.Server;
   private httpServer!: http.Server;
+  private h2Server!: http2.Http2Server;
   private tlsServer!: tls.Server;
   private httpPort = 0;
   private tlsPort = 0;
@@ -113,11 +116,23 @@ export class ProxyServer {
     await listen(this.httpServer, 0, "127.0.0.1");
     this.httpPort = portOf(this.httpServer);
 
-    // TLS terminator — decrypts CONNECT traffic, then re-routes the cleartext socket.
+    // Internal cleartext HTTP/2 server — decrypted h2 sockets are emitted into it (ALPN branch).
+    this.h2Server = http2.createServer();
+    this.h2Server.on("stream", (stream, headers) => {
+      const sock = stream.session?.socket as Socket | undefined;
+      const meta = sock ? this.connMeta.get(sock.remotePort ?? 0) : undefined;
+      void handleH2Stream(this.ctx, stream, headers, meta?.target);
+    });
+    this.h2Server.on("sessionError", (e) => log.debug("h2 session error:", e.message));
+    this.h2Server.on("clientError", () => {});
+
+    // TLS terminator — decrypts CONNECT traffic. ALPN selects h2 (→ h2 server) or http/1.1
+    // (→ raw route for h1 + wss). Re-routes the cleartext socket accordingly.
     const def = this.ca.getDefaultCredentials();
     this.tlsServer = tls.createServer({
       key: def.key,
       cert: def.cert,
+      ALPNProtocols: ["h2", "http/1.1"],
       SNICallback: (servername, cb) => {
         try {
           cb(null, this.ca.getSecureContext(servername));
@@ -127,6 +142,10 @@ export class ProxyServer {
       },
     });
     this.tlsServer.on("secureConnection", (tlsSock) => {
+      if (tlsSock.alpnProtocol === "h2") {
+        this.h2Server.emit("connection", tlsSock);
+        return;
+      }
       const meta = this.connMeta.get(tlsSock.remotePort ?? 0);
       const target = meta?.target ?? { host: tlsSock.servername || "", port: 443 };
       void this.route(tlsSock as unknown as Duplex, "https", target, {
@@ -157,6 +176,11 @@ export class ProxyServer {
 
   async stop(): Promise<void> {
     await this.addons.triggerLifecycle("done");
+    try {
+      this.h2Server.close();
+    } catch {
+      /* not listening; emitted-connection only */
+    }
     await Promise.all([
       closeServer(this.frontServer as unknown as http.Server),
       closeServer(this.httpServer),

@@ -24,8 +24,9 @@ single fast, dependency-light Bun binary with a clean inspector UI inspired by
 
 ## Features
 
-- **Full MITM** of HTTP, HTTPS, WebSocket and secure WebSocket (wss), with an
-  automatically generated root CA and per-host certificates minted on demand (SNI).
+- **Full MITM** of HTTP/1.1, **HTTP/2**, HTTPS, WebSocket and secure WebSocket (wss), with an
+  automatically generated root CA and per-host certificates minted on demand (SNI). HTTP/2 is
+  negotiated via ALPN and decoded into the same flow model as HTTP/1.
 - **Live web inspector** — real-time flow list, request/response headers & bodies, JSON
   pretty-printing, image preview, WebSocket message timeline (streamed over a WebSocket).
 - **Transparent decompression** — `gzip`, `br` and `deflate` responses are captured
