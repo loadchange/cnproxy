@@ -409,8 +409,13 @@ function loadFileMock(path: string): { headers: Headers; body: Buffer } | null {
 function loadDirMock(dir: string, reqPath: string, pattern: string): { headers: Headers; body: Buffer } | null {
   const base = resolve(dir.replace(/^file:\/\//, ""));
   let rel = (reqPath.split("?")[0] || "/");
-  // If the rule matched on a path prefix (e.g. `/assets`), serve files relative to that prefix.
-  if (pattern.startsWith("/") && rel.startsWith(pattern)) rel = rel.slice(pattern.length);
+  // Strip matched path prefix — works for both `/path` and `domain/path` patterns.
+  let pathPrefix = pattern;
+  if (!pattern.startsWith("/")) {
+    const slashIdx = pattern.indexOf("/");
+    pathPrefix = slashIdx !== -1 ? pattern.slice(slashIdx) : "";
+  }
+  if (pathPrefix && rel.startsWith(pathPrefix)) rel = rel.slice(pathPrefix.length);
   const pathname = decodeURIComponent(rel.replace(/^\/+/, ""));
   let target = resolve(join(base, pathname));
   // Reject path traversal outside the mapped directory.
