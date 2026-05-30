@@ -157,3 +157,23 @@ img.preview { max-width: 100%; border: 1px solid var(--border); border-radius: 6
 .drawer .code { flex: 1; margin: 10px; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 10px; font-family: var(--mono); font-size: 12px; resize: none; }
 input.code { flex: 0 0 auto; }
 code { background: var(--bg); padding: 1px 4px; border-radius: 3px; font-family: var(--mono); }
+
+/* ---- composer / sessions / editor / copy-as / timing (added: UI productization) ---- */
+.drawer.wide { width: 640px; }
+.compose-grid { display: grid; grid-template-rows: 1fr 1fr; flex: 1; }
+.compose-grid .code { margin: 8px 10px; min-height: 80px; }
+#composeDrawer { width: 640px; }
+.session-list { overflow: auto; padding: 6px 12px; }
+.session-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+.session-row em { color: var(--text-dim); font-style: normal; }
+.editor { padding: 8px 12px; border-bottom: 1px solid var(--border); background: #1c253033; }
+.editor label { display: block; font-size: 10px; text-transform: uppercase; color: var(--text-dim); margin: 6px 0 2px; }
+.editor .code { width: 100%; box-sizing: border-box; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 6px; font-family: var(--mono); font-size: 12px; min-height: 48px; resize: vertical; }
+.ws-send { display: flex; gap: 6px; margin-bottom: 8px; }
+.ws-send .code { flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 6px; }
+.v.timing { font-family: var(--mono); color: var(--text-dim); }
+.copyas { position: relative; display: inline-block; }
+.copyas-menu { display: none; position: absolute; top: 100%; left: 0; background: var(--bg-soft); border: 1px solid var(--border); border-radius: 6px; z-index: 20; min-width: 90px; }
+.copyas:hover .copyas-menu { display: block; }
+.copyas-menu a { display: block; padding: 6px 12px; font-size: 12px; cursor: pointer; }
+.copyas-menu a:hover { background: var(--bg-hover); }

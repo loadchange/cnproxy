@@ -91,6 +91,7 @@ function buildRow(f) {
   const tr = document.createElement("tr");
   tr.dataset.id = f.id;
   if (f.id === state.selected) tr.classList.add("sel");
+  if (f.color) tr.style.boxShadow = `inset 3px 0 0 ${f.color}`;
   const codeTxt = f.error ? "ERR" : f.statusCode || "···";
   const tags =
     (f.type === "websocket" ? `<span class="tag ws">WS ${f.wsMessages}</span>` : "") +
@@ -147,11 +148,22 @@ function renderDetail() {
       <div class="detail-url">${esc(d.url)}</div>
       <div class="detail-actions">
         ${intercepted ? `<button class="btn primary" onclick="act('${d.id}','resume')">▶ Resume</button>
+        <button class="btn" onclick="saveEdit('${d.id}')">✎ Apply edit</button>
         <button class="btn" onclick="act('${d.id}','kill')">✖ Kill</button>` : ""}
         <button class="btn" onclick="act('${d.id}','replay')">↻ Replay</button>
         <button class="btn ${d.marked ? "active" : ""}" onclick="act('${d.id}','mark')">★ Mark</button>
+        <button class="btn" onclick="editToComposer('${d.id}')">✏ Edit & resend</button>
+        <span class="copyas">
+          <button class="btn">⧉ Copy as ▾</button>
+          <span class="copyas-menu">
+            <a onclick="copyCode('${d.id}','curl')">curl</a>
+            <a onclick="copyCode('${d.id}','fetch')">fetch</a>
+            <a onclick="copyCode('${d.id}','python')">python</a>
+          </span>
+        </span>
       </div>
     </div>
+    ${intercepted ? interceptEditor(d) : ""}
     <div class="tabs" id="tabs">
       ${tabBtn("headers", "Headers")}
       ${tabBtn("request", "Request")}
@@ -184,6 +196,7 @@ function headersView(d) {
     <div class="k">Client</div><div class="v">${esc(d.client.address)}:${d.client.port}${d.client.tls ? " (TLS)" : ""}</div>
     <div class="k">Duration</div><div class="v">${fmtTime(d.duration) || "—"}</div>
     ${d.appliedRules?.length ? `<div class="k">Rules</div><div class="v">${esc(d.appliedRules.join(", "))}</div>` : ""}
+    ${timingRow(d.timings)}
   </div>`;
   html += `<div class="section-title">Request headers</div>${kvHeaders(d.request.headers)}`;
   if (d.response) html += `<div class="section-title">Response headers</div>${kvHeaders(d.response.headers)}`;
@@ -213,13 +226,42 @@ function bodyView(msg, title, d, isReq) {
 }
 
 function wsView(d) {
-  if (!d.websocketMessages.length) return `<div class="note">No messages captured yet.</div>`;
-  return d.websocketMessages
-    .map((m) => {
-      const txt = m.type === "text" ? new TextDecoder().decode(b64ToBytes(m.content)) : `[binary ${b64ToBytes(m.content).length} bytes]`;
-      return `<div class="ws-msg ${m.fromClient ? "up" : "down"}">${m.fromClient ? "▲ " : "▼ "}${esc(txt)}</div>`;
-    })
-    .join("");
+  const send = `<div class="ws-send">
+    <input id="wsText" class="code" placeholder="message to inject" />
+    <button class="btn" onclick="wsSend('${d.id}', false)">▼ to client</button>
+    <button class="btn" onclick="wsSend('${d.id}', true)">▲ to server</button>
+  </div>`;
+  if (!d.websocketMessages.length) return send + `<div class="note">No messages captured yet.</div>`;
+  return (
+    send +
+    d.websocketMessages
+      .map((m) => {
+        const txt = m.type === "text" ? new TextDecoder().decode(b64ToBytes(m.content)) : `[binary ${b64ToBytes(m.content).length} bytes]`;
+        return `<div class="ws-msg ${m.fromClient ? "up" : "down"}">${m.fromClient ? "▲ " : "▼ "}${esc(txt)}</div>`;
+      })
+      .join("")
+  );
+}
+
+function timingRow(t) {
+  if (!t) return "";
+  const fmt = (n) => (typeof n === "number" ? n + "ms" : "—");
+  return `<div class="k">Timing</div><div class="v timing">dns ${fmt(t.dns)} · connect ${fmt(t.connect)} · tls ${fmt(t.tls)} · ttfb ${fmt(t.ttfb)}</div>`;
+}
+
+function interceptEditor(d) {
+  const reqHeaders = d.request.headers.map(([k, v]) => `${k}: ${v}`).join("\n");
+  const reqBody = d.request.body ? new TextDecoder().decode(b64ToBytes(d.request.body)) : "";
+  const resHeaders = d.response ? d.response.headers.map(([k, v]) => `${k}: ${v}`).join("\n") : "";
+  const resBody = d.response?.body ? new TextDecoder().decode(b64ToBytes(d.response.body)) : "";
+  const isResp = !!d.response;
+  return `<div class="editor">
+    <div class="hint">Paused — edit and Apply, then Resume.</div>
+    <label>${isResp ? "Response" : "Request"} headers</label>
+    <textarea id="edHeaders" class="code">${esc(isResp ? resHeaders : reqHeaders)}</textarea>
+    <label>${isResp ? "Response" : "Request"} body</label>
+    <textarea id="edBody" class="code">${esc(isResp ? resBody : reqBody)}</textarea>
+  </div>`;
 }
 
 // ---------------- actions ----------------
@@ -232,13 +274,129 @@ window.act = async (id, action) => {
   }
 };
 
+function parseHeaderLines(text) {
+  const out = [];
+  for (const line of (text || "").split("\n")) {
+    const idx = line.indexOf(":");
+    if (idx === -1) continue;
+    out.push([line.slice(0, idx).trim(), line.slice(idx + 1).trim()]);
+  }
+  return out;
+}
+
+// Apply a breakpoint edit to the paused flow (request or response, whichever is present).
+window.saveEdit = async (id) => {
+  const d = state.detail;
+  const headers = parseHeaderLines($("#edHeaders")?.value);
+  const body = btoa(unescape(encodeURIComponent($("#edBody")?.value || "")));
+  const patch = d.response ? { response: { headers, body } } : { request: { headers, body } };
+  await fetch(`/api/flows/${id}/edit`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(patch) });
+};
+
+// Copy a flow as a code snippet (curl/fetch/python).
+window.copyCode = async (id, lang) => {
+  const code = await (await fetch(`/api/flows/${id}/code?lang=${lang}`)).text();
+  try { await navigator.clipboard.writeText(code); } catch {}
+  flash(`copied as ${lang}`);
+};
+
+// Load a captured flow's request into the composer for editing + resend.
+window.editToComposer = (id) => {
+  const d = state.detail;
+  if (!d) return;
+  $("#cMethod").value = d.method;
+  $("#cUrl").value = d.url;
+  $("#cHeaders").value = (d.request.headers || []).filter(([k]) => k.toLowerCase() !== "host").map(([k, v]) => `${k}: ${v}`).join("\n");
+  $("#cBody").value = d.request.body ? new TextDecoder().decode(b64ToBytes(d.request.body)) : "";
+  drawer("#composeDrawer", true);
+};
+
+window.wsSend = async (id, toServer) => {
+  const text = $("#wsText")?.value || "";
+  await fetch(`/api/flows/${id}/ws-send`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, toServer }) });
+  if ($("#wsText")) $("#wsText").value = "";
+};
+
+// ---------------- composer ----------------
+$("#composeBtn").onclick = () => drawer("#composeDrawer", true);
+$("#composeClose").onclick = () => drawer("#composeDrawer", false);
+$("#cImport").onclick = async () => {
+  const command = $("#cCurl").value.trim();
+  if (!command) return;
+  const spec = await (await fetch("/api/curl/parse", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ command }) })).json();
+  $("#cMethod").value = (spec.method || "GET").toUpperCase();
+  $("#cUrl").value = spec.url || "";
+  $("#cHeaders").value = (spec.headers || []).map(([k, v]) => `${k}: ${v}`).join("\n");
+  $("#cBody").value = spec.body || "";
+};
+$("#cSend").onclick = async () => {
+  const spec = {
+    method: $("#cMethod").value,
+    url: $("#cUrl").value.trim(),
+    headers: parseHeaderLines($("#cHeaders").value),
+    body: $("#cBody").value,
+  };
+  if (!spec.url) return;
+  $("#cResult").textContent = "sending…";
+  try {
+    const flow = await (await fetch("/api/compose", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(spec) })).json();
+    $("#cResult").textContent = `→ ${flow.error ? "error: " + flow.error : flow.statusCode + " (" + (flow.duration ?? "?") + "ms)"}`;
+    if (flow.id) select(flow.id);
+  } catch (e) {
+    $("#cResult").textContent = "failed";
+  }
+};
+
+// ---------------- sessions ----------------
+$("#sessionsBtn").onclick = async () => { drawer("#sessionsDrawer", true); renderSessions(); };
+$("#sessionsClose").onclick = () => drawer("#sessionsDrawer", false);
+$("#sessionSave").onclick = async () => {
+  const name = $("#sessionName").value.trim() || "session";
+  await fetch("/api/sessions/save", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name }) });
+  renderSessions();
+  flash("saved " + name);
+};
+async function renderSessions() {
+  const list = await (await fetch("/api/sessions")).json();
+  $("#sessionList").innerHTML = list.length
+    ? list.map((s) => `<div class="session-row"><span>${esc(s.name)} <em>(${s.flows} flows)</em></span><button class="btn" onclick="loadSession('${esc(s.name)}')">Load</button></div>`).join("")
+    : `<div class="note">No saved sessions.</div>`;
+}
+window.loadSession = async (name) => {
+  await fetch("/api/sessions/load", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name }) });
+  flash("loaded " + name);
+};
+
+// ---------------- HAR import ----------------
+$("#importHar").onchange = async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  const text = await file.text();
+  try {
+    const har = JSON.parse(text);
+    const r = await (await fetch("/api/import/har", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(har) })).json();
+    flash(`imported ${r.flows} flows`);
+  } catch {
+    flash("invalid HAR");
+  }
+  e.target.value = "";
+};
+
+function flash(msg) {
+  const el = $("#status");
+  const prev = el.textContent;
+  el.textContent = msg;
+  setTimeout(() => (el.textContent = prev), 1500);
+}
+
 // ---------------- options / drawers ----------------
 async function loadOptions() {
   const o = await (await fetch("/api/options")).json();
   $("#decrypt").checked = !!o.decryptHttps;
   $("#rulesText").value = o.rules || "";
   $("#interceptText").value = o.intercept || "";
-  $("#interceptBtn").classList.toggle("active", !!o.intercept);
+  if ($("#interceptResText")) $("#interceptResText").value = o.interceptResponse || "";
+  $("#interceptBtn").classList.toggle("active", !!o.intercept || !!o.interceptResponse);
 }
 async function patchOptions(patch) {
   await fetch("/api/options", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(patch) });
@@ -255,8 +413,10 @@ $("#rulesSave").onclick = async () => { await patchOptions({ rules: $("#rulesTex
 $("#interceptBtn").onclick = () => drawer("#interceptDrawer", true);
 $("#interceptClose").onclick = () => drawer("#interceptDrawer", false);
 $("#interceptSave").onclick = async () => {
-  await patchOptions({ intercept: $("#interceptText").value });
-  $("#interceptBtn").classList.toggle("active", !!$("#interceptText").value);
+  const reqExpr = $("#interceptText").value;
+  const resExpr = $("#interceptResText") ? $("#interceptResText").value : "";
+  await patchOptions({ intercept: reqExpr, interceptResponse: resExpr });
+  $("#interceptBtn").classList.toggle("active", !!reqExpr || !!resExpr);
   drawer("#interceptDrawer", false);
 };
 

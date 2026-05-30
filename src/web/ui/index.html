@@ -13,9 +13,13 @@
       <input id="filter" class="filter" placeholder="filter: ~m POST &amp; ~u /api  |  example.com" spellcheck="false" />
       <div class="spacer"></div>
       <label class="toggle"><input type="checkbox" id="decrypt" /> decrypt HTTPS</label>
+      <button id="composeBtn" class="btn primary">Compose</button>
       <button id="rulesBtn" class="btn">Rules</button>
       <button id="interceptBtn" class="btn">Intercept</button>
+      <button id="sessionsBtn" class="btn">Sessions</button>
       <button id="clearBtn" class="btn">Clear</button>
+      <label class="btn" for="importHar">Import HAR</label>
+      <input id="importHar" type="file" accept=".har,application/json" hidden />
       <a class="btn" href="/api/export/har" download>Export HAR</a>
       <a class="btn" href="/ca.crt" download>CA cert</a>
     </header>
@@ -70,6 +74,46 @@ api.example.com reqHeaders://{&quot;x-debug&quot;:&quot;1&quot;}"></textarea>
         <button id="interceptClose" class="btn">Close</button>
       </div>
       <input id="interceptText" class="code" placeholder="~m POST &amp; ~u /checkout" />
+      <div class="drawer-head" style="margin-top:8px">
+        <span class="hint">Response breakpoint — pause before relaying to the client:</span>
+      </div>
+      <input id="interceptResText" class="code" placeholder="~c 500  (empty = off)" />
+    </div>
+
+    <!-- Sessions drawer -->
+    <div class="drawer small" id="sessionsDrawer" hidden>
+      <div class="drawer-head">
+        <strong>Sessions</strong>
+        <span class="hint">save / reload captured traffic</span>
+        <div class="spacer"></div>
+        <input id="sessionName" class="code" style="width:160px" placeholder="name" />
+        <button id="sessionSave" class="btn primary">Save</button>
+        <button id="sessionsClose" class="btn">Close</button>
+      </div>
+      <div id="sessionList" class="session-list"></div>
+    </div>
+
+    <!-- Composer drawer (API testing) -->
+    <div class="drawer" id="composeDrawer" hidden>
+      <div class="drawer-head">
+        <strong>Compose</strong>
+        <select id="cMethod" class="code">
+          <option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option><option>HEAD</option><option>OPTIONS</option>
+        </select>
+        <input id="cUrl" class="code" style="flex:1" placeholder="https://api.example.com/v1/items  (supports {{env}})" />
+        <button id="cSend" class="btn primary">Send</button>
+        <button id="composeClose" class="btn">Close</button>
+      </div>
+      <div class="compose-grid">
+        <textarea id="cHeaders" class="code" spellcheck="false" placeholder="headers, one per line:&#10;authorization: Bearer {{TOKEN}}&#10;content-type: application/json"></textarea>
+        <textarea id="cBody" class="code" spellcheck="false" placeholder="request body"></textarea>
+      </div>
+      <div class="drawer-head">
+        <input id="cCurl" class="code" style="flex:1" placeholder="paste a curl command and click Import" />
+        <button id="cImport" class="btn">Import cURL</button>
+        <div class="spacer"></div>
+        <span id="cResult" class="hint"></span>
+      </div>
     </div>
 
     <script src="/app.js"></script>
