@@ -4,8 +4,11 @@
  * for display. Handles fragmentation, masking, and the common opcodes.
  */
 
+import zlib from "node:zlib";
+import { log } from "../logger.ts";
+
 export interface ParsedMessage {
-  type: "text" | "binary";
+  type: "text" | "binary" | "ping" | "pong" | "close";
   data: Buffer;
 }
 
@@ -40,6 +43,8 @@ export class WsFrameParser {
   private buf: Buffer = Buffer.alloc(0);
   private fragments: Buffer[] = [];
   private fragmentOpcode = 0;
+  private isCompressed = false;
+  public enableDeflate = false;
 
   /** Feed bytes; returns any complete application messages decoded so far. */
   push(chunk: Buffer): ParsedMessage[] {
@@ -51,6 +56,7 @@ export class WsFrameParser {
       const b0 = this.buf[0]!;
       const b1 = this.buf[1]!;
       const fin = (b0 & 0x80) !== 0;
+      const rsv1 = (b0 & 0x40) !== 0;
       const opcode = b0 & 0x0f;
       const masked = (b1 & 0x80) !== 0;
       let len = b1 & 0x7f;
@@ -85,19 +91,32 @@ export class WsFrameParser {
       this.buf = this.buf.subarray(offset + len);
 
       // opcodes: 0 continuation, 1 text, 2 binary, 8 close, 9 ping, 10 pong
-      if (opcode === 8 || opcode === 9 || opcode === 10) continue; // control frames: skip capture
+      if (opcode === 8 || opcode === 9 || opcode === 10) {
+        const type = opcode === 8 ? "close" : opcode === 9 ? "ping" : "pong";
+        out.push({ type, data: Buffer.from(payload) });
+        continue;
+      }
 
       if (opcode === 0) {
         this.fragments.push(Buffer.from(payload));
       } else {
         this.fragments = [Buffer.from(payload)];
         this.fragmentOpcode = opcode;
+        this.isCompressed = this.enableDeflate && rsv1;
       }
 
       if (fin) {
-        const data = Buffer.concat(this.fragments);
+        let data = Buffer.concat(this.fragments);
         this.fragments = [];
-        out.push({ type: this.fragmentOpcode === 2 ? "binary" : "text", data });
+        if (this.isCompressed) {
+          try {
+            data = zlib.inflateRawSync(Buffer.concat([data, Buffer.from([0x00, 0x00, 0xff, 0xff])]));
+          } catch (e: any) {
+            log.debug("WS inflate error:", e.message);
+          }
+        }
+        const type = this.fragmentOpcode === 2 ? "binary" : "text";
+        out.push({ type, data });
       }
     }
     return out;

@@ -152,6 +152,7 @@ function renderDetail() {
         <button class="btn" onclick="act('${d.id}','kill')">✖ Kill</button>` : ""}
         <button class="btn" onclick="act('${d.id}','replay')">↻ Replay</button>
         <button class="btn ${d.marked ? "active" : ""}" onclick="act('${d.id}','mark')">★ Mark</button>
+        <button class="btn" onclick="openDiff('${d.id}')">⚖ Diff</button>
         <button class="btn" onclick="editToComposer('${d.id}')">✏ Edit & resend</button>
         <span class="copyas">
           <button class="btn">⧉ Copy as ▾</button>
@@ -435,5 +436,249 @@ function b64ToBytes(b64) {
   return arr;
 }
 
+// ---------------- diff modal ----------------
+window.openDiff = (id) => {
+  $("#diffModal").hidden = false;
+  const flows = Array.from(state.flows.values());
+  let options = "";
+  for (const f of flows) {
+    options += `<option value="${f.id}" ${f.id === id ? "selected" : ""}>${esc(f.method)} ${esc(f.path)} (${f.id.slice(0, 8)})</option>`;
+  }
+  $("#diffSelectA").innerHTML = options;
+  $("#diffSelectB").innerHTML = options;
+  if (flows.length > 1) {
+    const other = flows.find(f => f.id !== id);
+    if (other) {
+      $("#diffSelectB").value = other.id;
+    }
+  }
+  triggerDiffCompare();
+};
+
+async function triggerDiffCompare() {
+  const idA = $("#diffSelectA").value;
+  const idB = $("#diffSelectB").value;
+  if (!idA || !idB) return;
+
+  $("#diffRequest").innerHTML = "Loading diff...";
+  $("#diffResponse").innerHTML = "Loading diff...";
+
+  try {
+    const res = await fetch(`/api/diff?a=${idA}&b=${idB}`);
+    if (!res.ok) throw new Error("Diff failed");
+    const diff = await res.json();
+
+    const renderLines = (lines) => {
+      if (!lines || !lines.length) return `<div class="note">No content or identical.</div>`;
+      return lines.map(line => `<span class="diff-line ${line.op}">${esc(line.text || " ")}</span>`).join("");
+    };
+
+    $("#diffRequest").innerHTML = renderLines(diff.request);
+    $("#diffResponse").innerHTML = renderLines(diff.response);
+  } catch (e) {
+    $("#diffRequest").innerHTML = "Error loading diff.";
+    $("#diffResponse").innerHTML = "Error loading diff.";
+  }
+}
+
+$("#diffClose").onclick = () => $("#diffModal").hidden = true;
+$("#diffCompareBtn").onclick = () => triggerDiffCompare();
+
+// ---------------- workspace ----------------
+state.workspace = { collections: [], environments: [], activeEnv: null };
+
+async function loadWorkspace() {
+  try {
+    const res = await fetch("/api/workspace");
+    if (res.ok) {
+      state.workspace = await res.json();
+      renderWorkspace();
+    }
+  } catch {}
+}
+
+async function saveWorkspace() {
+  await fetch("/api/workspace", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(state.workspace)
+  });
+}
+
+function renderWorkspace() {
+  // Environments dropdown
+  const envs = state.workspace.environments || [];
+  let html = `<option value="">No Active Environment</option>`;
+  for (const env of envs) {
+    html += `<option value="${esc(env.name)}" ${state.workspace.activeEnv === env.name ? "selected" : ""}>${esc(env.name)}</option>`;
+  }
+  $("#envSelect").innerHTML = html;
+
+  // Active environment variables text
+  const active = envs.find(e => e.name === state.workspace.activeEnv);
+  if (active) {
+    const lines = [];
+    for (const [k, v] of Object.entries(active.variables || {})) {
+      lines.push(`${k}=${v}`);
+    }
+    $("#envVariables").value = lines.join("\n");
+    $("#envVariables").disabled = false;
+  } else {
+    $("#envVariables").value = "";
+    $("#envVariables").disabled = true;
+  }
+
+  // Collections list
+  const cols = state.workspace.collections || [];
+  $("#collectionsList").innerHTML = cols.length
+    ? cols.map((c, idx) => `
+        <div class="collection-item" onclick="loadCollectionItem(${idx})">
+          <span>
+            <span class="c-method-tag m-${c.method}">${c.method}</span>
+            <span style="font-family: var(--mono);">${esc(c.url.split("?")[0])}</span>
+          </span>
+          <button class="c-del" onclick="event.stopPropagation(); deleteCollectionItem(${idx})">✖</button>
+        </div>`).join("")
+    : `<div class="note">No saved requests in collection.</div>`;
+}
+
+$("#workspaceBtn").onclick = () => {
+  drawer("#workspaceDrawer", true);
+  loadWorkspace();
+};
+$("#workspaceClose").onclick = () => drawer("#workspaceDrawer", false);
+
+$("#envSelect").onchange = (e) => {
+  state.workspace.activeEnv = e.target.value || null;
+  saveWorkspace();
+  renderWorkspace();
+};
+
+$("#envNewBtn").onclick = () => {
+  const name = prompt("Enter new environment name:");
+  if (!name) return;
+  state.workspace.environments = state.workspace.environments || [];
+  if (state.workspace.environments.some(e => e.name === name)) return alert("Environment already exists.");
+  state.workspace.environments.push({ name, variables: {} });
+  state.workspace.activeEnv = name;
+  saveWorkspace();
+  renderWorkspace();
+};
+
+$("#envDelBtn").onclick = () => {
+  const active = state.workspace.activeEnv;
+  if (!active) return;
+  state.workspace.environments = state.workspace.environments.filter(e => e.name !== active);
+  state.workspace.activeEnv = null;
+  saveWorkspace();
+  renderWorkspace();
+};
+
+$("#envSaveBtn").onclick = () => {
+  const activeName = state.workspace.activeEnv;
+  if (!activeName) return;
+  const active = state.workspace.environments.find(e => e.name === activeName);
+  if (!active) return;
+
+  const vars = {};
+  const text = $("#envVariables").value;
+  for (const line of text.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eq = trimmed.indexOf("=");
+    if (eq !== -1) {
+      vars[trimmed.slice(0, eq).trim()] = trimmed.slice(eq + 1).trim();
+    }
+  }
+  active.variables = vars;
+  saveWorkspace();
+  flash("Environment saved");
+};
+
+window.loadCollectionItem = (idx) => {
+  const c = state.workspace.collections[idx];
+  if (!c) return;
+  $("#cMethod").value = c.method;
+  $("#cUrl").value = c.url;
+  $("#cHeaders").value = c.headers.map(([k, v]) => `${k}: ${v}`).join("\n");
+  $("#cBody").value = c.body || "";
+  drawer("#composeDrawer", true);
+  drawer("#workspaceDrawer", false);
+};
+
+window.deleteCollectionItem = (idx) => {
+  state.workspace.collections.splice(idx, 1);
+  saveWorkspace();
+  renderWorkspace();
+};
+
+$("#cSaveToCollection").onclick = () => {
+  const spec = {
+    method: $("#cMethod").value,
+    url: $("#cUrl").value.trim(),
+    headers: parseHeaderLines($("#cHeaders").value),
+    body: $("#cBody").value,
+  };
+  if (!spec.url) return alert("Enter a URL first.");
+  state.workspace.collections = state.workspace.collections || [];
+  state.workspace.collections.push(spec);
+  saveWorkspace();
+  flash("Composer saved to collections");
+};
+
+// ---------------- auth helper ----------------
+$("#cAuthType").onchange = (e) => {
+  const type = e.target.value;
+  const fields = $("#authFields");
+  if (type === "none") {
+    fields.innerHTML = "";
+  } else if (type === "bearer") {
+    fields.innerHTML = `<input id="authBearerToken" placeholder="Token" class="code" />`;
+  } else if (type === "basic") {
+    fields.innerHTML = `
+      <input id="authBasicUser" placeholder="Username" class="code" style="width: 80px;" />
+      <input id="authBasicPass" placeholder="Password" type="password" class="code" style="width: 80px;" />`;
+  } else if (type === "apikey") {
+    fields.innerHTML = `
+      <input id="authApiKeyName" placeholder="Header name (e.g. x-api-key)" class="code" />
+      <input id="authApiKeyValue" placeholder="Value" class="code" />`;
+  }
+};
+
+$("#cApplyAuth").onclick = () => {
+  const type = $("#cAuthType").value;
+  let authName = "";
+  let authVal = "";
+
+  if (type === "bearer") {
+    const token = $("#authBearerToken")?.value.trim();
+    if (!token) return alert("Bearer token required.");
+    authName = "authorization";
+    authVal = `Bearer ${token}`;
+  } else if (type === "basic") {
+    const user = $("#authBasicUser")?.value.trim() || "";
+    const pass = $("#authBasicPass")?.value.trim() || "";
+    authName = "authorization";
+    authVal = `Basic ${btoa(unescape(encodeURIComponent(user + ":" + pass)))}`;
+  } else if (type === "apikey") {
+    const name = $("#authApiKeyName")?.value.trim();
+    const val = $("#authApiKeyValue")?.value.trim() || "";
+    if (!name) return alert("Header name required.");
+    authName = name.toLowerCase();
+    authVal = val;
+  }
+
+  // Inject or update the header in the textarea
+  const headers = parseHeaderLines($("#cHeaders").value);
+  const filtered = headers.filter(([k]) => k.toLowerCase() !== authName);
+  if (type !== "none") {
+    filtered.push([authName, authVal]);
+  }
+  $("#cHeaders").value = filtered.map(([k, v]) => `${k}: ${v}`).join("\n");
+  flash("Auth headers applied");
+};
+
+// Initial load
+loadWorkspace();
 loadOptions();
 connect();

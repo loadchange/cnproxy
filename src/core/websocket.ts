@@ -13,7 +13,7 @@ import type { ProxyContext } from "./context.ts";
 import type { PeekedRequest } from "./head-parser.ts";
 import { Flow, type ClientInfo } from "../flow/flow.ts";
 import { Headers } from "../flow/headers.ts";
-import { WsFrameParser, encodeFrame } from "./ws-frame.ts";
+import { WsFrameParser, encodeFrame, type ParsedMessage } from "./ws-frame.ts";
 import { log } from "../logger.ts";
 
 /** Live WebSocket relays, keyed by flow id, so the API can inject messages into them. */
@@ -91,10 +91,17 @@ export function relayWebSocket(
 
   const ready = scheme === "https" ? "secureConnect" : "connect";
   upstream.once(ready as "connect", () => {
-    // Replay the handshake to the origin in origin-form.
+    // Replay the handshake to the origin in origin-form, negotiating permessage-deflate safely.
     const lines = [`${head.method} ${originPath} HTTP/${head.httpVersion}`];
     for (let i = 0; i + 1 < head.rawHeaders.length; i += 2) {
-      lines.push(`${head.rawHeaders[i]}: ${head.rawHeaders[i + 1]}`);
+      const name = head.rawHeaders[i]!;
+      let val = head.rawHeaders[i + 1]!;
+      if (name.toLowerCase() === "sec-websocket-extensions") {
+        if (val.includes("permessage-deflate")) {
+          val = "permessage-deflate; client_no_context_takeover; server_no_context_takeover";
+        }
+      }
+      lines.push(`${name}: ${val}`);
     }
     upstream.write(lines.join("\r\n") + "\r\n\r\n");
     if (head.rest && head.rest.length) {
@@ -123,6 +130,27 @@ export function relayWebSocket(
         const idx = handshakeBuf.indexOf("\r\n\r\n");
         if (idx === -1) return;
         handshakeDone = true;
+
+        // Parse handshake headers to check if server agreed to permessage-deflate
+        const respText = handshakeBuf.subarray(0, idx).toString("utf-8");
+        const respLines = respText.split("\r\n");
+        let hasDeflate = false;
+        for (const line of respLines) {
+          const colon = line.indexOf(":");
+          if (colon !== -1) {
+            const name = line.slice(0, colon).trim().toLowerCase();
+            const val = line.slice(colon + 1).trim();
+            if (name === "sec-websocket-extensions" && val.includes("permessage-deflate")) {
+              hasDeflate = true;
+            }
+          }
+        }
+
+        if (hasDeflate) {
+          clientParser.enableDeflate = true;
+          serverParser.enableDeflate = true;
+        }
+
         const after = handshakeBuf.subarray(idx + 4);
         if (after.length) capture(ctx, flow, serverParser.push(after), false);
         return;
@@ -143,7 +171,7 @@ function pairsToTuples(raw: string[]): [string, string][] {
 function capture(
   ctx: ProxyContext,
   flow: Flow,
-  messages: { type: "text" | "binary"; data: Buffer }[],
+  messages: ParsedMessage[],
   fromClient: boolean,
 ): void {
   if (!messages.length) return;

@@ -1,7 +1,11 @@
 import { test, expect, beforeAll, afterAll } from "bun:test";
 import net from "node:net";
 import tls from "node:tls";
+import zlib from "node:zlib";
 import forge from "node-forge";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { ProxyServer } from "../src/index.ts";
 import { WsFrameParser } from "../src/core/ws-frame.ts";
 import { setLogLevel } from "../src/logger.ts";
@@ -42,7 +46,8 @@ beforeAll(async () => {
     },
   });
   originPort = wsOrigin.port;
-  proxy = new ProxyServer({ port: PROXY_PORT });
+  const dataDir = mkdtempSync(join(tmpdir(), "cnproxy-ws-"));
+  proxy = new ProxyServer({ port: PROXY_PORT, dataDir });
   await proxy.start();
 });
 
@@ -187,4 +192,38 @@ test("captures decrypted wss frames (CONNECT + TLS + upgrade)", async () => {
   expect(flow).toBeDefined();
   expect(flow!.websocketMessages.map((m) => m.content.toString())).toContain("ping");
   tlsWsOrigin.stop(true);
+});
+
+test("WsFrameParser decompresses permessage-deflate frames", () => {
+  const message = "Hello from compressed WebSocket!";
+  let compressed = zlib.deflateRawSync(Buffer.from(message));
+  if (compressed.slice(-4).equals(Buffer.from([0x00, 0x00, 0xff, 0xff]))) {
+    compressed = compressed.subarray(0, compressed.length - 4);
+  }
+
+  // FIN=1, RSV1=1, Opcode=1 (text) -> 0xc1
+  const header = Buffer.from([0xc1, compressed.length]);
+  const frame = Buffer.concat([header, compressed]);
+
+  const parser = new WsFrameParser();
+  parser.enableDeflate = true;
+
+  const msgs = parser.push(frame);
+  expect(msgs.length).toBe(1);
+  expect(msgs[0].type).toBe("text");
+  expect(msgs[0].data.toString()).toBe(message);
+});
+
+test("WsFrameParser parses and captures ping/pong/close control frames", () => {
+  // Ping: FIN=1, Opcode=9 -> 0x89
+  const pingHeader = Buffer.from([0x89, 0x04]);
+  const pingPayload = Buffer.from("ping");
+  const pingFrame = Buffer.concat([pingHeader, pingPayload]);
+
+  const parser = new WsFrameParser();
+  const msgs = parser.push(pingFrame);
+
+  expect(msgs.length).toBe(1);
+  expect(msgs[0].type).toBe("ping");
+  expect(msgs[0].data.toString()).toBe("ping");
 });

@@ -69,3 +69,35 @@ test("a fresh ProxyServer (simulated restart) can load a session from the same d
   expect(count).toBeGreaterThanOrEqual(2);
   expect(fresh.store.list().some((f) => f.request.path === "/b")).toBe(true);
 });
+
+test("automatically saves capture history and loads it on startup", async () => {
+  const testDataDir = mkdtempSync(join(tmpdir(), "cnproxy-auto-"));
+
+  // 1. Create first proxy server instance in testDataDir
+  const proxy1 = new ProxyServer({ port: PROXY_PORT + 2, dataDir: testDataDir });
+  await proxy1.start();
+
+  // Make a request through it
+  await fetch(`http://127.0.0.1:${originPort}/auto-save-test`, { proxy: `http://127.0.0.1:${PROXY_PORT + 2}` });
+
+  // Wait for the debounced auto-save to trigger (2.5s)
+  await new Promise((r) => setTimeout(r, 2500));
+
+  // Verify that the auto session was written to disk
+  const sessions1 = proxy1.listSessions();
+  expect(sessions1.some((s) => s.name === "auto.cnp")).toBe(true);
+
+  // Stop proxy1 cleanly
+  await proxy1.stop();
+
+  // 2. Start a fresh proxy server instance reading the same testDataDir
+  const proxy2 = new ProxyServer({ port: PROXY_PORT + 3, dataDir: testDataDir });
+  await proxy2.start();
+
+  // It should automatically load the flow from previous run on startup!
+  const list = proxy2.store.list();
+  expect(list.length).toBeGreaterThanOrEqual(1);
+  expect(list.some((f) => f.request.path === "/auto-save-test")).toBe(true);
+
+  await proxy2.stop();
+});

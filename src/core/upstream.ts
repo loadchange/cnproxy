@@ -1,13 +1,9 @@
-/**
- * Outbound request execution. Sends a flow's (possibly rewritten) request to the origin
- * server — directly or through an upstream proxy — and returns the Node response stream
- * so the caller can both relay it to the client and tee a bounded copy into the flow.
- */
-
 import http from "node:http";
 import https from "node:https";
 import net from "node:net";
 import tls from "node:tls";
+import http2 from "node:http2";
+import { PassThrough } from "node:stream";
 import type { IncomingMessage } from "node:http";
 import type { CnRequest } from "../flow/flow.ts";
 
@@ -23,6 +19,26 @@ export interface Timings {
   tls?: number;
   ttfb?: number;
 }
+
+// Keep-alive agents for H1 connection reuse
+const httpAgent = new http.Agent({ keepAlive: true });
+const httpsAgent = new https.Agent({ keepAlive: true, rejectUnauthorized: false });
+
+// Cache of host:port -> ALPN protocol determined ('h1' or 'h2')
+const originAlpnCache = new Map<string, "h1" | "h2">();
+
+// Pool of active HTTP/2 client sessions
+const h2SessionPool = new Map<string, http2.ClientHttp2Session>();
+
+// Forbidden headers that cannot be sent to an HTTP/2 upstream
+const FORBIDDEN_H2_UPSTREAM = new Set([
+  "connection",
+  "transfer-encoding",
+  "keep-alive",
+  "upgrade",
+  "proxy-connection",
+  "host",
+]);
 
 export function sendUpstream(req: CnRequest, cfg: UpstreamConfig, timings?: Timings): Promise<IncomingMessage> {
   if (cfg.upstream) return sendViaProxy(req, cfg);
@@ -42,21 +58,221 @@ function buildHeaders(req: CnRequest): http.OutgoingHttpHeaders {
   return headers;
 }
 
+function setupSessionEvents(session: http2.ClientHttp2Session, authority: string) {
+  session.on("error", () => h2SessionPool.delete(authority));
+  session.on("close", () => h2SessionPool.delete(authority));
+  session.on("goaway", () => h2SessionPool.delete(authority));
+}
+
+function getH2Session(authority: string, servername?: string): Promise<http2.ClientHttp2Session> {
+  const cached = h2SessionPool.get(authority);
+  if (cached && !cached.closed && !cached.destroyed) {
+    return Promise.resolve(cached);
+  }
+
+  return new Promise((resolve, reject) => {
+    const url = new URL(authority);
+    const host = url.hostname;
+    const port = url.port ? parseInt(url.port, 10) : 443;
+
+    const socket = tls.connect({
+      host,
+      port,
+      servername,
+      ALPNProtocols: ["h2"],
+      rejectUnauthorized: false,
+    });
+
+    socket.on("error", reject);
+    socket.on("secureConnect", () => {
+      const session = http2.connect(authority, {
+        createConnection: () => socket,
+      });
+
+      let resolved = false;
+      session.on("connect", () => {
+        if (!resolved) {
+          resolved = true;
+          h2SessionPool.set(authority, session);
+          resolve(session);
+        }
+      });
+      session.on("error", (err) => {
+        h2SessionPool.delete(authority);
+        if (!resolved) {
+          resolved = true;
+          reject(err);
+        }
+      });
+      setupSessionEvents(session, authority);
+    });
+  });
+}
+
+function dispatchH2(
+  session: http2.ClientHttp2Session,
+  req: CnRequest,
+  timings?: Timings,
+  startTime?: number,
+): Promise<IncomingMessage> {
+  return new Promise((resolve, reject) => {
+    const start = startTime ?? Date.now();
+    const h2Headers: Record<string, string | string[]> = {
+      ":method": req.method,
+      ":path": req.path,
+      ":scheme": req.scheme,
+      ":authority": req.host + (req.port === 443 ? "" : `:${req.port}`),
+    };
+    for (const [k, v] of req.headers.entries()) {
+      const lower = k.toLowerCase();
+      if (FORBIDDEN_H2_UPSTREAM.has(lower)) continue;
+      if (Array.isArray(h2Headers[lower])) {
+        (h2Headers[lower] as string[]).push(v);
+      } else if (h2Headers[lower] !== undefined) {
+        h2Headers[lower] = [h2Headers[lower] as string, v];
+      } else {
+        h2Headers[lower] = v;
+      }
+    }
+
+    const h2stream = session.request(h2Headers);
+
+    h2stream.on("response", (headers) => {
+      if (timings) timings.ttfb = Date.now() - start;
+      const rawHeaders: string[] = [];
+      for (const [key, val] of Object.entries(headers)) {
+        if (Array.isArray(val)) {
+          for (const v of val) {
+            rawHeaders.push(key, v);
+          }
+        } else if (val !== undefined) {
+          rawHeaders.push(key, val);
+        }
+      }
+      const statusCode = headers[":status"] ? parseInt(String(headers[":status"]), 10) : 200;
+      const wrapper = new PassThrough();
+      (wrapper as any).statusCode = statusCode;
+      (wrapper as any).statusMessage = "";
+      (wrapper as any).httpVersion = "2.0";
+      (wrapper as any).rawHeaders = rawHeaders;
+
+      h2stream.pipe(wrapper);
+      h2stream.on("error", (err) => wrapper.emit("error", err));
+      resolve(wrapper as any);
+    });
+
+    h2stream.on("error", reject);
+
+    if (req.body && req.body.length) {
+      h2stream.write(req.body);
+    }
+    h2stream.end();
+  });
+}
+
+function negotiateAndSend(
+  req: CnRequest,
+  cfg: UpstreamConfig,
+  timings?: Timings,
+): Promise<IncomingMessage> {
+  const start = Date.now();
+  const servername = net.isIP(req.host) === 0 ? req.host : undefined;
+
+  return new Promise((resolve, reject) => {
+    const socket = tls.connect({
+      host: req.host,
+      port: req.port,
+      servername,
+      ALPNProtocols: ["h2", "http/1.1"],
+      rejectUnauthorized: false,
+    });
+
+    if (timings) {
+      socket.on("lookup", () => { if (timings) timings.dns = Date.now() - start; });
+      socket.on("connect", () => { if (timings) timings.connect = Date.now() - start; });
+      socket.on("secureConnect", () => { if (timings) timings.tls = Date.now() - start; });
+    }
+
+    socket.on("error", reject);
+    socket.on("secureConnect", () => {
+      const alpn = socket.alpnProtocol;
+      const key = `${req.host}:${req.port}`;
+
+      if (alpn === "h2") {
+        originAlpnCache.set(key, "h2");
+        const session = http2.connect(`https://${key}`, {
+          createConnection: () => socket,
+        });
+
+        setupSessionEvents(session, `https://${key}`);
+
+        dispatchH2(session, req, timings, start)
+          .then(resolve)
+          .catch(reject);
+      } else {
+        originAlpnCache.set(key, "h1");
+        const options: https.RequestOptions = {
+          host: req.host,
+          port: req.port,
+          method: req.method,
+          path: req.path,
+          headers: buildHeaders(req),
+          timeout: cfg.timeout,
+          createConnection: () => socket,
+          rejectUnauthorized: false,
+          servername,
+        };
+        dispatch(https, options, req, timings, start)
+          .then(resolve)
+          .catch(reject);
+      }
+    });
+  });
+}
+
 function sendDirect(req: CnRequest, cfg: UpstreamConfig, timings?: Timings): Promise<IncomingMessage> {
   const isHttps = req.scheme === "https";
-  const mod = isHttps ? https : http;
-  const options: https.RequestOptions = {
-    host: req.host,
-    port: req.port,
-    method: req.method,
-    path: req.path,
-    headers: buildHeaders(req),
-    timeout: cfg.timeout,
-    // We are the MITM; we present the origin's real cert chain to ourselves. Accept it.
-    rejectUnauthorized: false,
-    servername: isHttps && net.isIP(req.host) === 0 ? req.host : undefined,
-  };
-  return dispatch(mod, options, req, timings);
+  if (!isHttps) {
+    const options: http.RequestOptions = {
+      host: req.host,
+      port: req.port,
+      method: req.method,
+      path: req.path,
+      headers: buildHeaders(req),
+      timeout: cfg.timeout,
+      agent: httpAgent,
+    };
+    return dispatch(http, options, req, timings);
+  }
+
+  const key = `${req.host}:${req.port}`;
+  const alpn = originAlpnCache.get(key);
+
+  if (alpn === "h2") {
+    return getH2Session(`https://${key}`, net.isIP(req.host) === 0 ? req.host : undefined)
+      .then((session) => dispatchH2(session, req, timings))
+      .catch(() => {
+        originAlpnCache.delete(key);
+        return negotiateAndSend(req, cfg, timings);
+      });
+  }
+
+  if (alpn === "h1") {
+    const options: https.RequestOptions = {
+      host: req.host,
+      port: req.port,
+      method: req.method,
+      path: req.path,
+      headers: buildHeaders(req),
+      timeout: cfg.timeout,
+      rejectUnauthorized: false,
+      servername: net.isIP(req.host) === 0 ? req.host : undefined,
+      agent: httpsAgent,
+    };
+    return dispatch(https, options, req, timings);
+  }
+
+  return negotiateAndSend(req, cfg, timings);
 }
 
 function dispatch(
@@ -64,9 +280,10 @@ function dispatch(
   options: https.RequestOptions,
   req: CnRequest,
   timings?: Timings,
+  startTime?: number,
 ): Promise<IncomingMessage> {
   return new Promise((resolve, reject) => {
-    const start = Date.now();
+    const start = startTime ?? Date.now();
     const outReq = mod.request(options, (res) => {
       if (timings) timings.ttfb = Date.now() - start;
       resolve(res);
@@ -99,6 +316,7 @@ function sendViaProxy(req: CnRequest, cfg: UpstreamConfig): Promise<IncomingMess
       path: req.url, // absolute URI for proxy
       headers: buildHeaders(req),
       timeout: cfg.timeout,
+      agent: httpAgent,
     };
     return dispatch(http, options, req);
   }
@@ -111,6 +329,7 @@ function sendViaProxy(req: CnRequest, cfg: UpstreamConfig): Promise<IncomingMess
       method: "CONNECT",
       path: `${req.host}:${req.port}`,
       timeout: cfg.timeout,
+      agent: httpAgent,
     });
     conn.on("connect", (_res, socket) => {
       const tlsSock = tls.connect(

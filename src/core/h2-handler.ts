@@ -125,6 +125,22 @@ export async function handleH2Stream(
 
     await ctx.addons.trigger("responseheaders", flow);
 
+    const ctype = res.headers.get("content-type") ?? "";
+    const clenRaw = res.headers.get("content-length");
+    const clen = clenRaw ? parseInt(clenRaw, 10) : NaN;
+    const isEventStream = /text\/event-stream/i.test(ctype);
+    const STREAM_THRESHOLD = 1024 * 1024; // 1 MB
+    const canStream =
+      !ctx.rules.hasResponseBodyRule(flow) &&
+      !ctx.addons.has("response") &&
+      (isEventStream || !Number.isFinite(clen) || clen > STREAM_THRESHOLD);
+
+    if (canStream) {
+      ctx.rules.applyResponse(flow);
+      await streamResponseH2(stream, upstreamRes, res, flow, ctx, max);
+      return;
+    }
+
     const rawBody = await collectBody(upstreamRes);
     res.timestampEnd = ctx.now();
     const encoding = res.headers.get("content-encoding") ?? "";
@@ -167,6 +183,73 @@ export async function handleH2Stream(
     }
     ctx.store.update(flow);
   }
+}
+
+function streamResponseH2(
+  stream: ServerHttp2Stream,
+  upstreamRes: any,
+  model: CnResponse,
+  flow: Flow,
+  ctx: ProxyContext,
+  max: number,
+): Promise<void> {
+  return new Promise<void>((resolve) => {
+    if (stream.closed || stream.destroyed) {
+      resolve();
+      return;
+    }
+    const out: Record<string, string | string[]> = { ":status": String(model.statusCode || 200) };
+    const grouped = new Map<string, string[]>();
+    for (const [k, v] of model.headers.entries()) {
+      const lower = k.toLowerCase();
+      if (FORBIDDEN_H2.has(lower)) continue;
+      if (lower === "content-length") continue;
+      const arr = grouped.get(lower) ?? [];
+      arr.push(v);
+      grouped.set(lower, arr);
+    }
+    for (const [k, arr] of grouped) out[k] = arr.length === 1 ? arr[0]! : arr;
+    stream.respond(out);
+
+    const captured: Buffer[] = [];
+    let storedLen = 0;
+    let truncated = false;
+
+    upstreamRes.on("data", (chunk: Buffer) => {
+      if (stream.closed || stream.destroyed) return;
+      const ok = stream.write(chunk);
+      if (!ok) {
+        upstreamRes.pause();
+        stream.once("drain", () => upstreamRes.resume());
+      }
+      if (storedLen < max) {
+        const room = max - storedLen;
+        captured.push(chunk.length <= room ? chunk : chunk.subarray(0, room));
+        storedLen += Math.min(chunk.length, room);
+        if (chunk.length > room) truncated = true;
+      } else {
+        truncated = true;
+      }
+    });
+
+    const finish = () => {
+      model.body = captured.length ? Buffer.concat(captured) : Buffer.alloc(0);
+      model.bodyTruncated = truncated;
+      model.timestampEnd = ctx.now();
+      ctx.store.update(flow);
+      resolve();
+    };
+
+    upstreamRes.on("end", () => {
+      if (!stream.closed && !stream.destroyed) stream.end();
+      finish();
+    });
+
+    upstreamRes.on("error", () => {
+      if (!stream.closed && !stream.destroyed) stream.close(NGHTTP2_CANCEL);
+      finish();
+    });
+  });
 }
 
 function mockResponse(mock: { status: number; headers: Headers; body: Buffer }, ctx: ProxyContext): CnResponse {

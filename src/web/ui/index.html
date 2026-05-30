@@ -17,6 +17,7 @@
       <button id="rulesBtn" class="btn">Rules</button>
       <button id="interceptBtn" class="btn">Intercept</button>
       <button id="sessionsBtn" class="btn">Sessions</button>
+      <button id="workspaceBtn" class="btn">Workspace</button>
       <button id="clearBtn" class="btn">Clear</button>
       <label class="btn" for="importHar">Import HAR</label>
       <input id="importHar" type="file" accept=".har,application/json" hidden />
@@ -104,6 +105,18 @@ api.example.com reqHeaders://{&quot;x-debug&quot;:&quot;1&quot;}"></textarea>
         <button id="cSend" class="btn primary">Send</button>
         <button id="composeClose" class="btn">Close</button>
       </div>
+      <!-- Auth Helper Row -->
+      <div class="auth-helper-row">
+        <label>Auth:</label>
+        <select id="cAuthType" class="code">
+          <option value="none">None</option>
+          <option value="bearer">Bearer Token</option>
+          <option value="basic">Basic Auth</option>
+          <option value="apikey">API Key</option>
+        </select>
+        <div id="authFields" class="auth-fields"></div>
+        <button id="cApplyAuth" class="btn small primary">Apply Auth</button>
+      </div>
       <div class="compose-grid">
         <textarea id="cHeaders" class="code" spellcheck="false" placeholder="headers, one per line:&#10;authorization: Bearer {{TOKEN}}&#10;content-type: application/json"></textarea>
         <textarea id="cBody" class="code" spellcheck="false" placeholder="request body"></textarea>
@@ -113,6 +126,61 @@ api.example.com reqHeaders://{&quot;x-debug&quot;:&quot;1&quot;}"></textarea>
         <button id="cImport" class="btn">Import cURL</button>
         <div class="spacer"></div>
         <span id="cResult" class="hint"></span>
+      </div>
+    </div>
+
+    <!-- Workspace drawer (Collections + Environments) -->
+    <div class="drawer" id="workspaceDrawer" hidden>
+      <div class="drawer-head">
+        <strong>Workspace</strong>
+        <div class="spacer"></div>
+        <button id="workspaceClose" class="btn">Close</button>
+      </div>
+      <div class="workspace-layout">
+        <div class="workspace-pane">
+          <h3>Environments</h3>
+          <div class="env-controls">
+            <select id="envSelect" class="code"></select>
+            <button id="envNewBtn" class="btn small">New</button>
+            <button id="envDelBtn" class="btn small">Delete</button>
+          </div>
+          <textarea id="envVariables" class="code" placeholder="VAR_NAME=value&#10;TOKEN=bearer-token-123" spellcheck="false" style="height: 120px; flex: none;"></textarea>
+          <button id="envSaveBtn" class="btn primary small" style="margin-top: 4px; align-self: flex-end;">Save Environment</button>
+        </div>
+        <div class="workspace-pane">
+          <h3>Collections</h3>
+          <div id="collectionsList" class="collections-list"></div>
+          <div class="collections-controls" style="margin-top:8px">
+            <button id="cSaveToCollection" class="btn small primary">Save Composer Request</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Diff Modal -->
+    <div class="modal-overlay" id="diffModal" hidden>
+      <div class="modal-content">
+        <div class="modal-head">
+          <strong>⚖ Visual Flow Diff</strong>
+          <div class="spacer"></div>
+          <button id="diffClose" class="btn">Close</button>
+        </div>
+        <div class="diff-selection">
+          <select id="diffSelectA" class="code" style="flex: 1;"></select>
+          <span style="color: var(--text-dim);">vs</span>
+          <select id="diffSelectB" class="code" style="flex: 1;"></select>
+          <button id="diffCompareBtn" class="btn primary">Compare</button>
+        </div>
+        <div class="diff-body">
+          <div class="diff-column">
+            <h4>Request Diff</h4>
+            <div id="diffRequest" class="diff-pane-content"></div>
+          </div>
+          <div class="diff-column">
+            <h4>Response Diff</h4>
+            <div id="diffResponse" class="diff-pane-content"></div>
+          </div>
+        </div>
       </div>
     </div>
 

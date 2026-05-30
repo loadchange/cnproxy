@@ -54,8 +54,7 @@ export class CnResponse {
 
 export interface WebSocketMessage {
   fromClient: boolean;
-  /** "text" | "binary" */
-  type: "text" | "binary";
+  type: "text" | "binary" | "ping" | "pong" | "close";
   content: Buffer;
   timestamp: number;
 }
@@ -315,7 +314,7 @@ export interface FlowRecord {
     timestampStart: number;
     timestampEnd: number;
   } | null;
-  websocketMessages: { fromClient: boolean; type: "text" | "binary"; content: string; timestamp: number }[];
+  websocketMessages: { fromClient: boolean; type: "text" | "binary" | "ping" | "pong" | "close"; content: string; timestamp: number }[];
 }
 
 export interface FlowSummary {

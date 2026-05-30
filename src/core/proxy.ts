@@ -33,7 +33,9 @@ import { handleH2Stream } from "./h2-handler.ts";
 import { relayWebSocket, injectWsMessage } from "./websocket.ts";
 import { peekRequestHead } from "./head-parser.ts";
 import { negotiateSocks } from "./socks.ts";
-import { saveSession, loadSession, listSessions } from "../flow/session.ts";
+import { saveSession, loadSession, listSessions, sessionsDir } from "../flow/session.ts";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { harToFlows } from "../flow/har.ts";
 import { composeRequest, CookieJar, type RequestSpec } from "../api/composer.ts";
 import { loadWorkspace, saveWorkspace, activeEnvVars, type Workspace } from "../api/workspace.ts";
@@ -220,6 +222,23 @@ export class ProxyServer {
     });
     await listen(this.frontServer as unknown as http.Server, this.options.get("port"), this.options.get("host"));
 
+    // Auto-load session if exists
+    try {
+      const path = join(sessionsDir(this.options.get("dataDir")), "auto.cnp");
+      if (existsSync(path)) {
+        const flows = loadSession(this.options.get("dataDir"), "auto");
+        for (const f of flows) this.store.add(f);
+        log.debug(`Auto-loaded ${flows.length} flows from previous session.`);
+      }
+    } catch (e: any) {
+      log.debug("Failed to auto-load session:", e.message);
+    }
+
+    // Register auto-save listeners
+    this.store.on("add", () => this.triggerAutoSave());
+    this.store.on("update", () => this.triggerAutoSave());
+    this.store.on("clear", () => this.triggerAutoSave());
+
     await this.addons.triggerLifecycle("running");
     log.banner(
       `cnproxy listening on ${this.options.get("host")}:${this.options.get("port")} ` +
@@ -229,6 +248,18 @@ export class ProxyServer {
 
   async stop(): Promise<void> {
     await this.addons.triggerLifecycle("done");
+    if (this.autoSaveTimer) {
+      clearTimeout(this.autoSaveTimer);
+      this.autoSaveTimer = null;
+    }
+    if (this.autoSaveDirty) {
+      this.autoSaveDirty = false;
+      try {
+        saveSession(this.options.get("dataDir"), "auto", this.store.list());
+      } catch (e: any) {
+        log.debug("Final auto-save failed:", e.message);
+      }
+    }
     try {
       this.h2Server.close();
     } catch {
@@ -380,6 +411,25 @@ export class ProxyServer {
     const allow = this.options.get("allowHosts");
     if (allow.length && !allow.some((p) => matchHost(p, host))) return false;
     return true;
+  }
+
+  private autoSaveTimer: any = null;
+  private autoSaveDirty = false;
+
+  private triggerAutoSave(): void {
+    this.autoSaveDirty = true;
+    if (this.autoSaveTimer) return;
+    this.autoSaveTimer = setTimeout(() => {
+      this.autoSaveTimer = null;
+      if (this.autoSaveDirty) {
+        this.autoSaveDirty = false;
+        try {
+          saveSession(this.options.get("dataDir"), "auto", this.store.list());
+        } catch (e: any) {
+          log.debug("Auto-save failed:", e.message);
+        }
+      }
+    }, 2000);
   }
 }
 

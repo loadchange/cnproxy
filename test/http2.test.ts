@@ -150,3 +150,58 @@ test("applies a mock rule over HTTP/2", async () => {
   expect(body).toEqual({ mocked: "h2" });
   proxy.options.update({ rules: "" });
 });
+
+test("supports end-to-end HTTP/2 upstream and connection reuse", async () => {
+  // Spin up a real HTTP/2 secure origin server
+  let h2ReceivedCount = 0;
+  const h2Origin = http2.createSecureServer(selfSigned(), (req, res) => {
+    h2ReceivedCount++;
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({
+      e2eH2: true,
+      httpVersion: req.httpVersion,
+      count: h2ReceivedCount
+    }));
+  });
+
+  await new Promise<void>((resolve) => h2Origin.listen(0, "127.0.0.1", () => resolve()));
+  const h2OriginPort = (h2Origin.address() as any).port;
+
+  try {
+    // Send first request: will negotiate and establish H2 session
+    const session1 = await h2ConnectThroughProxy("localhost", h2OriginPort);
+    const body1 = await new Promise<any>((resolve, reject) => {
+      const req = session1.request({ ":method": "GET", ":path": "/h2-origin", ":authority": `localhost:${h2OriginPort}` });
+      let data = "";
+      req.on("data", (d) => (data += d));
+      req.on("end", () => {
+        session1.close();
+        resolve(JSON.parse(data));
+      });
+      req.on("error", reject);
+      req.end();
+      setTimeout(() => reject(new Error("H2 first request timeout")), 5000);
+    });
+
+    expect(body1).toEqual({ e2eH2: true, httpVersion: "2.0", count: 1 });
+
+    // Send second request: should reuse the H2 session cached in proxy!
+    const session2 = await h2ConnectThroughProxy("localhost", h2OriginPort);
+    const body2 = await new Promise<any>((resolve, reject) => {
+      const req = session2.request({ ":method": "GET", ":path": "/h2-origin", ":authority": `localhost:${h2OriginPort}` });
+      let data = "";
+      req.on("data", (d) => (data += d));
+      req.on("end", () => {
+        session2.close();
+        resolve(JSON.parse(data));
+      });
+      req.on("error", reject);
+      req.end();
+      setTimeout(() => reject(new Error("H2 second request timeout")), 5000);
+    });
+
+    expect(body2).toEqual({ e2eH2: true, httpVersion: "2.0", count: 2 });
+  } finally {
+    h2Origin.close();
+  }
+});
