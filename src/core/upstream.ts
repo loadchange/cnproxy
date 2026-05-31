@@ -22,7 +22,11 @@ export interface Timings {
 
 // Keep-alive agents for H1 connection reuse
 const httpAgent = new http.Agent({ keepAlive: true });
-const httpsAgent = new https.Agent({ keepAlive: true, rejectUnauthorized: false });
+let httpsAgent = new https.Agent({ keepAlive: true, rejectUnauthorized: false });
+
+export function setRejectUnauthorized(reject: boolean): void {
+  httpsAgent = new https.Agent({ keepAlive: true, rejectUnauthorized: reject });
+}
 
 // Cache of host:port -> ALPN protocol determined ('h1' or 'h2')
 const originAlpnCache = new Map<string, "h1" | "h2">();
@@ -40,7 +44,7 @@ const FORBIDDEN_H2_UPSTREAM = new Set([
   "host",
 ]);
 
-export function sendUpstream(req: CnRequest, cfg: UpstreamConfig, timings?: Timings): Promise<IncomingMessage> {
+export function sendUpstream(req: CnRequest, cfg: UpstreamConfig & { rejectUnauthorized?: boolean }, timings?: Timings): Promise<IncomingMessage> {
   if (cfg.upstream) return sendViaProxy(req, cfg);
   return sendDirect(req, cfg, timings);
 }
@@ -80,7 +84,7 @@ function getH2Session(authority: string, servername?: string): Promise<http2.Cli
       port,
       servername,
       ALPNProtocols: ["h2"],
-      rejectUnauthorized: false,
+      rejectUnauthorized: cfg?.rejectUnauthorized ?? false,
     });
 
     socket.on("error", reject);
@@ -184,7 +188,7 @@ function negotiateAndSend(
       port: req.port,
       servername,
       ALPNProtocols: ["h2", "http/1.1"],
-      rejectUnauthorized: false,
+      rejectUnauthorized: cfg?.rejectUnauthorized ?? false,
     });
 
     if (timings) {
@@ -219,7 +223,7 @@ function negotiateAndSend(
           headers: buildHeaders(req),
           timeout: cfg.timeout,
           createConnection: () => socket,
-          rejectUnauthorized: false,
+          rejectUnauthorized: cfg?.rejectUnauthorized ?? false,
           servername,
         };
         dispatch(https, options, req, timings, start)
@@ -265,7 +269,7 @@ function sendDirect(req: CnRequest, cfg: UpstreamConfig, timings?: Timings): Pro
       path: req.path,
       headers: buildHeaders(req),
       timeout: cfg.timeout,
-      rejectUnauthorized: false,
+      rejectUnauthorized: cfg.rejectUnauthorized ?? false,
       servername: net.isIP(req.host) === 0 ? req.host : undefined,
       agent: httpsAgent,
     };
@@ -336,7 +340,7 @@ function sendViaProxy(req: CnRequest, cfg: UpstreamConfig): Promise<IncomingMess
         {
           socket,
           servername: net.isIP(req.host) === 0 ? req.host : undefined,
-          rejectUnauthorized: false,
+          rejectUnauthorized: cfg.rejectUnauthorized ?? false,
         },
         () => {
           const outReq = https.request(
