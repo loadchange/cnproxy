@@ -1,0 +1,50 @@
+[package]
+name = "cnproxy-core"
+version = "0.1.0"
+edition = "2021"
+description = "MITM proxy engine core — shared by desktop (sidecar) and mobile (iOS/Android)"
+license = "MIT"
+
+[lib]
+# staticlib for iOS (Xcode links .a), cdylib for Android (JNI loads .so)
+# The actual crate type is selected per target via cargo flags.
+# Both are listed here so `cargo check` works during development.
+crate-type = ["lib", "staticlib", "cdylib"]
+
+[dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# HTTP (hyper 1.x)
+hyper = { version = "1", features = ["client", "server", "http1", "http2"] }
+hyper-util = { version = "0.1", features = ["client-legacy", "server-auto", "tokio"] }
+http-body-util = "0.1"
+
+# TLS (rustls + native roots)
+tokio-rustls = "0.26"
+rustls-pemfile = "2"
+rustls-native-certs = "0.7"
+webpki-roots = "0.26"
+
+# HTTP/2
+h2 = "0.4"
+
+# WebSocket
+tokio-tungstenite = "0.24"
+
+# Certificate generation
+rcgen = "0.13"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Utilities
+bytes = "1"
+thiserror = "2"
+lru = "0.12"
+time = "0.3"
