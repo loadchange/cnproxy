@@ -16,6 +16,7 @@
 import http from "node:http";
 import http2 from "node:http2";
 import net from "node:net";
+import os from "node:os";
 import tls from "node:tls";
 import type { Socket } from "node:net";
 import type { Duplex } from "node:stream";
@@ -93,6 +94,19 @@ export class ProxyServer {
   /** Actual port the proxy front is bound to (resolved after start). */
   get port(): number {
     return portOf(this.frontServer);
+  }
+
+  /** Get the first non-loopback IPv4 address of this machine (for mobile setup). */
+  getLocalIp(): string {
+    const nets = os.networkInterfaces();
+    for (const name of Object.keys(nets)) {
+      for (const net of nets[name] ?? []) {
+        if (net.family === "IPv4" && !net.internal && net.address !== "0.0.0.0") {
+          return net.address;
+        }
+      }
+    }
+    return "127.0.0.1";
   }
 
   /** Re-issue a captured request as a new flow. */
@@ -288,7 +302,7 @@ export class ProxyServer {
       return;
     }
     if (first[0] === 0x05 || first[0] === 0x04) {
-      const result = await negotiateSocks(socket, first);
+      const result = await negotiateSocks(socket, first, this.options.get("socksAuth"));
       if (!result) {
         socket.destroy();
         return;

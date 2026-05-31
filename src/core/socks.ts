@@ -61,12 +61,13 @@ function makeReader(socket: Socket, initial: Buffer) {
 export async function negotiateSocks(
   socket: Socket,
   initial: Buffer,
+  socksAuth?: { username: string; password: string } | null,
 ): Promise<{ target: SocksTarget; leftover: Buffer } | null> {
   const reader = makeReader(socket, initial);
   try {
     const ver = await reader.read(1);
     if (!ver) return null;
-    const target = ver[0] === 0x05 ? await socks5(socket, reader) : ver[0] === 0x04 ? await socks4(socket, reader) : null;
+    const target = ver[0] === 0x05 ? await socks5(socket, reader, socksAuth) : ver[0] === 0x04 ? await socks4(socket, reader) : null;
     if (!target) return null;
     return { target, leftover: reader.release() };
   } catch {
@@ -75,11 +76,37 @@ export async function negotiateSocks(
   }
 }
 
-async function socks5(socket: Socket, reader: ReturnType<typeof makeReader>): Promise<SocksTarget | null> {
+async function socks5(socket: Socket, reader: ReturnType<typeof makeReader>, socksAuth?: { username: string; password: string } | null): Promise<SocksTarget | null> {
   const nmethods = await reader.read(1);
   if (!nmethods) return null;
-  await reader.read(nmethods[0]!); // discard offered methods
-  socket.write(Buffer.from([0x05, 0x00])); // select NO-AUTH
+  const methods = await reader.read(nmethods[0]!);
+  if (!methods) return null;
+
+  if (socksAuth) {
+    const offered = new Set(methods);
+    if (!offered.has(0x02)) {
+      socket.write(Buffer.from([0x05, 0xff]));
+      return null;
+    }
+    socket.write(Buffer.from([0x05, 0x02]));
+    const authVer = await reader.read(1);
+    if (!authVer || authVer[0] !== 0x01) return null;
+    const ulen = await reader.read(1);
+    if (!ulen) return null;
+    const uname = await reader.read(ulen[0]!);
+    if (!uname) return null;
+    const plen = await reader.read(1);
+    if (!plen) return null;
+    const passwd = await reader.read(plen[0]!);
+    if (!passwd) return null;
+    if (uname.toString("utf8") !== socksAuth.username || passwd.toString("utf8") !== socksAuth.password) {
+      socket.write(Buffer.from([0x01, 0x01]));
+      return null;
+    }
+    socket.write(Buffer.from([0x01, 0x00]));
+  } else {
+    socket.write(Buffer.from([0x05, 0x00]));
+  }
 
   const head = await reader.read(4); // ver, cmd, rsv, atyp
   if (!head) return null;

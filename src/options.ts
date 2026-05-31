@@ -39,6 +39,12 @@ export interface CnProxyOptions {
   timeout: number;
   /** Open the web UI in the browser on start. */
   openBrowser: boolean;
+  /** SOCKS5 username/password auth. When set, clients must authenticate. */
+  socksAuth: { username: string; password: string } | null;
+  /** Reject invalid upstream TLS certificates. */
+  rejectUnauthorized: boolean;
+  /** Reverse proxy mode: forward all traffic to a fixed target with MITM. */
+  reverseProxy: { target: string } | null;
 }
 
 export const DEFAULT_OPTIONS: CnProxyOptions = {
@@ -58,6 +64,9 @@ export const DEFAULT_OPTIONS: CnProxyOptions = {
   rules: "",
   timeout: 60_000,
   openBrowser: false,
+  socksAuth: null,
+  rejectUnauthorized: false,
+  reverseProxy: null,
 };
 
 type Listener = (changed: Set<keyof CnProxyOptions>) => void;
