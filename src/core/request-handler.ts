@@ -38,8 +38,16 @@ export async function handleRequest(
   const max = ctx.options.get("maxBodySize");
 
   // ---- resolve target ----
+  const reverseProxy = ctx.options.get("reverseProxy");
   try {
-    if (mitmTarget) {
+    if (reverseProxy && !mitmTarget) {
+      // Reverse proxy: forward every incoming request to the configured target.
+      const u = new URL(reverseProxy.target);
+      flow.request.scheme = u.protocol === "https:" ? "https" : "http";
+      flow.request.host = u.hostname;
+      flow.request.port = u.port ? parseInt(u.port, 10) : flow.request.scheme === "https" ? 443 : 80;
+      flow.request.path = clientReq.url ?? "/";
+    } else if (mitmTarget) {
       flow.request.scheme = "https";
       const hostHeader = clientReq.headers.host ?? `${mitmTarget.host}:${mitmTarget.port}`;
       const { host, port } = splitHostPort(hostHeader, mitmTarget.port);
@@ -72,6 +80,11 @@ export async function handleRequest(
   flow.request.method = clientReq.method ?? "GET";
   flow.request.httpVersion = clientReq.httpVersion;
   flow.request.headers = Headers.fromRaw(clientReq.rawHeaders);
+  // In reverse-proxy mode, rewrite the Host header to the configured target origin.
+  if (reverseProxy && !mitmTarget) {
+    const defaultPort = flow.request.scheme === "https" ? 443 : 80;
+    flow.request.headers.set("host", flow.request.port === defaultPort ? flow.request.host : `${flow.request.host}:${flow.request.port}`);
+  }
   flow.request.timestampStart = now;
   ctx.store.add(flow);
 
