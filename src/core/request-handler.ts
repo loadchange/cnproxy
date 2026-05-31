@@ -81,6 +81,11 @@ export async function handleRequest(
     // Keep the FULL request body on the flow through hooks/rules/upstream (so reqReplace
     // and addons operate on real bytes); bound the stored copy for display only at the end.
     flow.request.body = await collectBody(clientReq);
+    const reqEncoding = flow.request.headers.get("content-encoding") ?? "";
+    if (flow.request.body && isDecodable(reqEncoding)) {
+      flow.request.body = decodeBody(flow.request.body, reqEncoding);
+      flow.request.headers.delete("content-encoding");
+    }
     flow.request.timestampEnd = ctx.now();
 
     await ctx.addons.trigger("request", flow);

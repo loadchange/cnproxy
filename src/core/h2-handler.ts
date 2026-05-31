@@ -75,6 +75,11 @@ export async function handleH2Stream(
   try {
     await ctx.addons.trigger("requestheaders", flow);
     flow.request.body = await collectBody(stream);
+    const reqEncoding = flow.request.headers.get("content-encoding") ?? "";
+    if (flow.request.body && isDecodable(reqEncoding)) {
+      flow.request.body = decodeBody(flow.request.body, reqEncoding);
+      flow.request.headers.delete("content-encoding");
+    }
     flow.request.timestampEnd = ctx.now();
 
     await ctx.addons.trigger("request", flow);
