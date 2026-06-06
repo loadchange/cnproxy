@@ -178,8 +178,15 @@ test("DELETE /api/flows/:id removes a single flow", async () => {
   expect(flowEntry, `no /delete-test flow found; store has: ${JSON.stringify(before.map((f: any) => f.path))}`).toBeDefined();
   const id = flowEntry.id;
 
+  // Pre-check: verify the flow is gettable before DELETE
+  const preCheck = await fetch(`${API}/api/flows/${id}`);
+  const preBody = await preCheck.clone().json().catch(() => null);
+  process.stderr.write(`[diag] GET /api/flows/${id} → ${preCheck.status} ${JSON.stringify(preBody?.path ?? preBody?.error)}\n`);
+
   // Delete it
   const res = await fetch(`${API}/api/flows/${id}`, { method: "DELETE" });
+  const resClone = await res.clone().json().catch(() => null);
+  process.stderr.write(`[diag] DELETE /api/flows/${id} → ${res.status} ${JSON.stringify(resClone)}\n`);
   expect(res.status).toBe(200);
   const body = await res.json();
   expect(body.ok).toBe(true);
@@ -211,6 +218,8 @@ test("POST /api/import/postman imports a Postman collection", async () => {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(collection),
   });
+  const resBody = await res.clone().json().catch(() => null);
+  process.stderr.write(`[diag] POST /api/import/postman → ${res.status} ${JSON.stringify(resBody)}\n`);
   expect(res.status).toBe(200);
   const body = await res.json();
   expect(body.ok).toBe(true);
