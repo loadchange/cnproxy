@@ -132,6 +132,30 @@ function forwardProxyFetch(targetUrl: string, proxyUrl: string, init: RequestIni
   });
 }
 
+/**
+ * Direct http:// fetch via node:http — bypasses undici to avoid potential quirks with certain
+ * HTTP methods (e.g. DELETE) on specific Node.js/platform combinations in CI.
+ */
+function directFetch(targetUrl: string, init: RequestInit): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const u = new URL(targetUrl);
+    const { headers, body } = buildHeaders(targetUrl, init);
+    const req = http.request(
+      {
+        host: u.hostname,
+        port: parseInt(u.port, 10) || 80,
+        method: (init.method ?? "GET").toUpperCase(),
+        path: u.pathname + u.search,
+        headers,
+      },
+      (res) => responseFrom(res, resolve),
+    );
+    req.on("error", reject);
+    if (body) req.write(body);
+    req.end();
+  });
+}
+
 /** https:// target → HTTP CONNECT tunnel through the proxy, then a TLS request over it. */
 function connectProxyFetch(targetUrl: string, proxyUrl: string, init: RequestInit): Promise<Response> {
   return new Promise((resolve, reject) => {
@@ -175,14 +199,19 @@ function connectProxyFetch(targetUrl: string, proxyUrl: string, init: RequestIni
 }
 
 globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit & { proxy?: string }) => {
+  const urlStr = typeof input === "string" ? input : input instanceof URL ? input.href : (input as Request).url;
   if (init && init.proxy) {
     const { proxy, ...rest } = init;
-    const urlStr = typeof input === "string" ? input : input instanceof URL ? input.href : (input as Request).url;
     if (urlStr.startsWith("http://")) {
       return forwardProxyFetch(urlStr, proxy, rest);
     }
     // https:// (and anything else) → CONNECT tunnel through the proxy.
     return connectProxyFetch(urlStr, proxy, rest);
+  }
+  // Route plain http:// calls through node:http to avoid undici quirks (e.g. DELETE not reaching
+  // the server correctly on some Node/platform combinations seen in CI).
+  if (urlStr.startsWith("http://")) {
+    return directFetch(urlStr, init ?? {});
   }
   return realFetch(input, init);
 }) as typeof fetch;
