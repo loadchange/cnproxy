@@ -5,6 +5,7 @@
  */
 import { test, expect, beforeAll, afterAll } from "vitest";
 import http from "node:http";
+import net from "node:net";
 // `WebSocket` is only a Node global from v21+; import from `ws` so the test runs on Node 20 too.
 import { WebSocket } from "ws";
 import { ProxyServer, WebInspector } from "../src/index.ts";
@@ -12,10 +13,25 @@ import { setLogLevel } from "../src/logger.ts";
 
 setLogLevel("error");
 
+/** Probe for a free port by briefly binding a throwaway server. */
+function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const s = net.createServer();
+    s.unref();
+    s.listen(0, "127.0.0.1", () => {
+      const port = (s.address() as net.AddressInfo).port;
+      s.close(() => resolve(port));
+    });
+    s.on("error", reject);
+  });
+}
+
 let origin: http.Server;
 let originPort = 0;
 let proxy: ProxyServer;
 let web: WebInspector;
+let PROXY_PORT = 0;
+let WEB_PORT = 0;
 let PROXY = "";
 let API = "";
 
@@ -27,14 +43,17 @@ beforeAll(async () => {
   await new Promise<void>((r) => origin.listen(0, "127.0.0.1", r));
   originPort = (origin.address() as any).port;
 
-  // Use port 0 so the OS picks a free port, avoiding conflicts on shared CI runners.
-  proxy = new ProxyServer({ port: 0, webPort: 0 });
+  // Probe for free ports so CI runners with quirky http.Server.address() still get a known port.
+  PROXY_PORT = await freePort();
+  WEB_PORT = await freePort();
+
+  proxy = new ProxyServer({ port: PROXY_PORT, webPort: WEB_PORT });
   await proxy.start();
   web = new WebInspector(proxy);
   await web.start();
 
-  PROXY = `http://127.0.0.1:${proxy.port}`;
-  API = `http://127.0.0.1:${web.port}`;
+  PROXY = `http://127.0.0.1:${PROXY_PORT}`;
+  API = `http://127.0.0.1:${WEB_PORT}`;
 
   // Generate one captured flow.
   await fetch(`http://127.0.0.1:${originPort}/seed`, { proxy: PROXY });
@@ -119,7 +138,7 @@ test("GET / serves the inspector UI", async () => {
 
 test("WS /ws pushes a snapshot then live adds", async () => {
   const received: any[] = [];
-  const ws = new WebSocket(`ws://127.0.0.1:${web.port}/ws`);
+  const ws = new WebSocket(`ws://127.0.0.1:${WEB_PORT}/ws`);
   await new Promise<void>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error("ws timeout")), 4000);
     ws.onmessage = (ev) => {
