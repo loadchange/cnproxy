@@ -46,5 +46,5 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Utilities
 bytes = "1"
 thiserror = "2"
-lru = "0.12"
+lru = "0.16"
 time = "0.3"
