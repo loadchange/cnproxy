@@ -275,7 +275,13 @@ function sendDirect(req: CnRequest, cfg: UpstreamConfig, timings?: Timings): Pro
       servername: net.isIP(req.host) === 0 ? req.host : undefined,
       agent: httpsAgent,
     };
-    return dispatch(https, options, req, timings);
+    // A pooled keep-alive socket can be stale (origin closed it, or the ephemeral port was
+    // reused by a different host); the reused socket then hangs up before any response. Mirror
+    // the h2 path: drop the ALPN cache entry and retry once over a fresh negotiated connection.
+    return dispatch(https, options, req, timings).catch(() => {
+      originAlpnCache.delete(key);
+      return negotiateAndSend(req, cfg, timings);
+    });
   }
 
   return negotiateAndSend(req, cfg, timings);
