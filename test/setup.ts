@@ -12,7 +12,17 @@
  */
 import http from "node:http";
 import zlib from "node:zlib";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { ProxyAgent } from "undici";
+
+// Isolate every test run from the developer's real ~/.cnproxy: a fresh temp dataDir
+// means no auto-load of a previous session's flows (which would pollute store.find())
+// and no auto-save writing back to the shared global directory.
+if (!process.env.CNPROXY_DATA_DIR) {
+  process.env.CNPROXY_DATA_DIR = mkdtempSync(join(tmpdir(), "cnproxy-test-"));
+}
 
 const realFetch = globalThis.fetch;
 const proxyAgents = new Map<string, ProxyAgent>();

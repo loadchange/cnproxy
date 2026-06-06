@@ -1,4 +1,4 @@
-name: Release CNProxy
+name: Release
 
 on:
   push:
@@ -9,64 +9,59 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: true
 
-jobs:
-  # ── Build the cnproxy sidecar binaries ──────────────────────────────────────
-  build-sidecar:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            bun_target: bun-darwin-arm64
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            bun_target: bun-darwin-x64
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            bun_target: bun-linux-x64
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            bun_target: bun-windows-x64
+permissions:
+  contents: write
 
-    runs-on: ${{ matrix.os }}
+jobs:
+  # ── Standalone CLI binaries (no Node.js needed at runtime) ───────────────────
+  # @yao-pkg/pkg cross-compiles, so one Linux runner emits every target.
+  cli-binaries:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          bun-version: latest
+          node-version: 22
+          cache: npm
 
-      - name: Install dependencies
-        run: bun install
+      - run: npm ci
 
-      - name: Build sidecar
+      - name: Build all CLI binaries
+        run: node scripts/build.mjs --pkg
+
+      - name: Stage release assets
         run: |
-          mkdir -p cnproxy-app/src-tauri/binaries
-          bun build --compile --target ${{ matrix.bun_target }} bin/cnproxy.ts --outfile cnproxy-app/src-tauri/binaries/cnproxy-${{ matrix.target }}
-          chmod +x cnproxy-app/src-tauri/binaries/cnproxy-${{ matrix.target }} || true
+          mkdir -p out
+          # pkg emits one file per target as dist/cnproxy-<os>-<arch>[.exe]; ship them all.
+          for f in dist/cnproxy-*; do
+            [ "$f" = "dist/cnproxy-*" ] && continue
+            cp "$f" "out/$(basename "$f")"
+          done
+          ls -la out
 
-      - name: Upload sidecar artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload CLI binaries to the release
+        uses: softprops/action-gh-release@v2
         with:
-          name: sidecar-${{ matrix.target }}
-          path: cnproxy-app/src-tauri/binaries/cnproxy-${{ matrix.target }}*
-          retention-days: 1
+          files: out/*
+          fail_on_unmatched_files: false
 
-  # ── Build the Tauri app ──────────────────────────────────────────────────
-  build-app:
-    needs: build-sidecar
+  # ── Native desktop apps (Tauri) for macOS / Windows / Linux ──────────────────
+  desktop:
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: macos-latest
-            targets: aarch64-apple-darwin,x86_64-apple-darwin
+            rust-targets: aarch64-apple-darwin x86_64-apple-darwin
+            tauri-target: universal-apple-darwin
           - os: ubuntu-latest
-            targets: x86_64-unknown-linux-gnu
+            rust-targets: x86_64-unknown-linux-gnu
+            tauri-target: x86_64-unknown-linux-gnu
           - os: windows-latest
-            targets: x86_64-pc-windows-msvc
+            rust-targets: x86_64-pc-windows-msvc
+            tauri-target: x86_64-pc-windows-msvc
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -74,6 +69,8 @@ jobs:
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.tauri-target == 'universal-apple-darwin' && 'aarch64-apple-darwin,x86_64-apple-darwin' || matrix.tauri-target }}
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -90,68 +87,33 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
+      - run: npm ci
 
-      - name: Install frontend deps
-        run: |
-          cd cnproxy-app
-          bun install
+      - name: Install Tauri CLI for the app
+        run: npm --prefix cnproxy-app install
 
-      - name: Download sidecar artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: cnproxy-app/src-tauri/binaries
-          pattern: sidecar-*
-          merge-multiple: true
+      - name: Build sidecar binaries
+        run: node scripts/build-sidecar.mjs ${{ matrix.rust-targets }}
 
-      - name: List sidecar binaries
-        run: ls -la cnproxy-app/src-tauri/binaries/ || echo "No binaries found"
-
-      - name: Build Tauri app
+      - name: Build and publish the Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # macOS code signing + notarization (optional — set these repo secrets to enable):
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
+          projectPath: cnproxy-app
           tauriScript: npx tauri
           tagName: ${{ github.ref_name }}
           releaseName: "CNProxy ${{ github.ref_name }}"
-          releaseBody: "See the assets to download and install this version."
+          releaseBody: "Download the installer for your platform below. CLI binaries are attached separately."
           releaseDraft: false
           prerelease: false
-          args: --target ${{ matrix.targets }}
-
-  # ── Quick dev build on push to main (no release) ───────────────────────
-  check:
-    if: github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/v')
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: cnproxy-app/src-tauri -> target
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-
-      - name: Install deps
-        run: |
-          bun install
-          cd cnproxy-app && bun install
-
-      - name: Build sidecar (macOS arm64 only)
-        run: |
-          mkdir -p cnproxy-app/src-tauri/binaries
-          bun build --compile --target bun-darwin-arm64 bin/cnproxy.ts --outfile cnproxy-app/src-tauri/binaries/cnproxy-aarch64-apple-darwin
-          chmod +x cnproxy-app/src-tauri/binaries/cnproxy-aarch64-apple-darwin
-
-      - name: Cargo check
-        run: cd cnproxy-app/src-tauri && cargo check
+          args: --target ${{ matrix.tauri-target }}

@@ -58,7 +58,7 @@ export const DEFAULT_OPTIONS: CnProxyOptions = {
   maxBodySize: 5 * 1024 * 1024,
   maxFlows: 5000,
   upstream: null,
-  dataDir: join(homedir(), ".cnproxy"),
+  dataDir: process.env.CNPROXY_DATA_DIR || join(homedir(), ".cnproxy"),
   intercept: "",
   interceptResponse: "",
   rules: "",

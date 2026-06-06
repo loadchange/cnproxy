@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Type-check + the full functional test suite, on the supported Node range ──
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node-version: [20, 22]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+  # ── Build smoke: bundle + a native single-file binary for the host platform ──
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build self-contained binary (host)
+        run: node scripts/build-sidecar.mjs x86_64-unknown-linux-gnu
+
+      - name: Smoke-test the binary
+        run: |
+          BIN=cnproxy-app/src-tauri/binaries/cnproxy-x86_64-unknown-linux-gnu
+          chmod +x "$BIN"
+          "$BIN" --port 18990 --web-port 18991 &
+          PID=$!
+          sleep 2
+          curl -fsS -x http://127.0.0.1:18990 http://example.com -o /dev/null -w 'proxy=%{http_code}\n' --max-time 10
+          curl -fsS http://127.0.0.1:18991/api/flows -o /dev/null -w 'webapi=%{http_code}\n' --max-time 5
+          kill $PID
+
+  # ── Compile-check the Tauri (Rust) desktop shell ──
+  app-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: cnproxy-app/src-tauri -> target
+
+      - name: Linux system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build sidecar (host)
+        run: node scripts/build-sidecar.mjs x86_64-unknown-linux-gnu
+
+      - name: Cargo check
+        run: cargo check --manifest-path cnproxy-app/src-tauri/Cargo.toml

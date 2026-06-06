@@ -10,6 +10,8 @@ import type { CnRequest } from "../flow/flow.ts";
 export interface UpstreamConfig {
   upstream: string | null;
   timeout: number;
+  /** When false (default), upstream TLS certificate errors are ignored. */
+  rejectUnauthorized?: boolean;
 }
 
 /** Per-stage timing offsets (ms from request start). Populated when a collector is passed. */
@@ -44,7 +46,7 @@ const FORBIDDEN_H2_UPSTREAM = new Set([
   "host",
 ]);
 
-export function sendUpstream(req: CnRequest, cfg: UpstreamConfig & { rejectUnauthorized?: boolean }, timings?: Timings): Promise<IncomingMessage> {
+export function sendUpstream(req: CnRequest, cfg: UpstreamConfig, timings?: Timings): Promise<IncomingMessage> {
   if (cfg.upstream) return sendViaProxy(req, cfg);
   return sendDirect(req, cfg, timings);
 }
@@ -68,7 +70,7 @@ function setupSessionEvents(session: http2.ClientHttp2Session, authority: string
   session.on("goaway", () => h2SessionPool.delete(authority));
 }
 
-function getH2Session(authority: string, servername?: string): Promise<http2.ClientHttp2Session> {
+function getH2Session(authority: string, servername?: string, rejectUnauthorized = false): Promise<http2.ClientHttp2Session> {
   const cached = h2SessionPool.get(authority);
   if (cached && !cached.closed && !cached.destroyed) {
     return Promise.resolve(cached);
@@ -84,7 +86,7 @@ function getH2Session(authority: string, servername?: string): Promise<http2.Cli
       port,
       servername,
       ALPNProtocols: ["h2"],
-      rejectUnauthorized: cfg?.rejectUnauthorized ?? false,
+      rejectUnauthorized,
     });
 
     socket.on("error", reject);
@@ -253,7 +255,7 @@ function sendDirect(req: CnRequest, cfg: UpstreamConfig, timings?: Timings): Pro
   const alpn = originAlpnCache.get(key);
 
   if (alpn === "h2") {
-    return getH2Session(`https://${key}`, net.isIP(req.host) === 0 ? req.host : undefined)
+    return getH2Session(`https://${key}`, net.isIP(req.host) === 0 ? req.host : undefined, cfg.rejectUnauthorized ?? false)
       .then((session) => dispatchH2(session, req, timings))
       .catch(() => {
         originAlpnCache.delete(key);
