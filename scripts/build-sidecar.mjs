@@ -15,6 +15,7 @@ import { execFileSync } from "node:child_process";
 import { copyFileSync, mkdirSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { platform } from "node:process";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const distDir = join(root, "dist");
@@ -75,4 +76,16 @@ for (const triple of triples) {
   const dest = join(binDir, `cnproxy-${triple}${ext}`);
   copyFileSync(src, dest);
   console.log(`Sidecar → ${dest}`);
+}
+
+// For macOS universal builds: lipo the two arch binaries into a fat universal binary.
+// Tauri expects `cnproxy-universal-apple-darwin` when building --target universal-apple-darwin.
+const macArm = "aarch64-apple-darwin";
+const macX64 = "x86_64-apple-darwin";
+if (triples.includes(macArm) && triples.includes(macX64) && platform === "darwin") {
+  const arm = join(binDir, `cnproxy-${macArm}`);
+  const x64 = join(binDir, `cnproxy-${macX64}`);
+  const fat = join(binDir, "cnproxy-universal-apple-darwin");
+  run("lipo", ["-create", "-output", fat, arm, x64]);
+  console.log(`Universal → ${fat}`);
 }
