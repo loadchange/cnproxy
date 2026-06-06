@@ -25,6 +25,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          registry-url: "https://registry.npmjs.org"
 
       - run: npm ci
 
@@ -46,6 +47,14 @@ jobs:
         with:
           files: out/*
           fail_on_unmatched_files: false
+
+      - name: Publish to npm
+        run: |
+          VERSION="${{ github.ref_name }}"
+          npm version "${VERSION#v}" --no-git-tag-version
+          npm publish --access public --ignore-scripts
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   # ── Native desktop apps (Tauri) for macOS / Windows / Linux ──────────────────
   desktop:
