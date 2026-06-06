@@ -26,7 +26,7 @@ beforeAll(async () => {
   proxy = new ProxyServer({ port: PROXY_PORT, webPort: WEB_PORT });
   await proxy.start();
   web = new WebInspector(proxy);
-  web.start();
+  await web.start();
   await fetch(`http://127.0.0.1:${originPort}/api/thing?x=1`, { proxy: `http://127.0.0.1:${PROXY_PORT}` });
 });
 

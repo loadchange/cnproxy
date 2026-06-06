@@ -16,10 +16,8 @@ let origin: http.Server;
 let originPort = 0;
 let proxy: ProxyServer;
 let web: WebInspector;
-const PROXY_PORT = 18920;
-const WEB_PORT = 18921;
-const PROXY = `http://127.0.0.1:${PROXY_PORT}`;
-const API = `http://127.0.0.1:${WEB_PORT}`;
+let PROXY = "";
+let API = "";
 
 beforeAll(async () => {
   origin = http.createServer((req, res) => {
@@ -29,10 +27,14 @@ beforeAll(async () => {
   await new Promise<void>((r) => origin.listen(0, "127.0.0.1", r));
   originPort = (origin.address() as any).port;
 
-  proxy = new ProxyServer({ port: PROXY_PORT, webPort: WEB_PORT });
+  // Use port 0 so the OS picks a free port, avoiding conflicts on shared CI runners.
+  proxy = new ProxyServer({ port: 0, webPort: 0 });
   await proxy.start();
   web = new WebInspector(proxy);
-  web.start();
+  await web.start();
+
+  PROXY = `http://127.0.0.1:${proxy.port}`;
+  API = `http://127.0.0.1:${web.port}`;
 
   // Generate one captured flow.
   await fetch(`http://127.0.0.1:${originPort}/seed`, { proxy: PROXY });
@@ -117,7 +119,7 @@ test("GET / serves the inspector UI", async () => {
 
 test("WS /ws pushes a snapshot then live adds", async () => {
   const received: any[] = [];
-  const ws = new WebSocket(`ws://127.0.0.1:${WEB_PORT}/ws`);
+  const ws = new WebSocket(`ws://127.0.0.1:${web.port}/ws`);
   await new Promise<void>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error("ws timeout")), 4000);
     ws.onmessage = (ev) => {
@@ -153,7 +155,9 @@ test("DELETE /api/flows/:id removes a single flow", async () => {
   await fetch(`http://127.0.0.1:${originPort}/delete-test`, { proxy: PROXY });
   const before = await (await fetch(`${API}/api/flows`)).json();
   expect(before.length).toBeGreaterThanOrEqual(1);
-  const id = before.find((f: any) => f.path === "/delete-test").id;
+  const flowEntry = before.find((f: any) => f.path === "/delete-test");
+  expect(flowEntry, `no /delete-test flow found; store has: ${JSON.stringify(before.map((f: any) => f.path))}`).toBeDefined();
+  const id = flowEntry.id;
 
   // Delete it
   const res = await fetch(`${API}/api/flows/${id}`, { method: "DELETE" });

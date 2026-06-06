@@ -43,7 +43,7 @@ beforeAll(async () => {
   proxy = new ProxyServer({ port: PROXY_PORT, webPort: WEB_PORT, interceptResponse: "~u /edit-resp" });
   await proxy.start();
   web = new WebInspector(proxy);
-  web.start();
+  await web.start();
 });
 
 afterAll(async () => {

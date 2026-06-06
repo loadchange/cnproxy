@@ -30,7 +30,7 @@ beforeAll(async () => {
   proxy = new ProxyServer({ port: PROXY_PORT, webPort: WEB_PORT, intercept: "~u /pause" });
   await proxy.start();
   web = new WebInspector(proxy);
-  web.start();
+  await web.start();
 });
 
 afterAll(async () => {
