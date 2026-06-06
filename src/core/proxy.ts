@@ -186,7 +186,17 @@ export class ProxyServer {
     });
     this.httpServer.on("request", (req, res) => {
       const s = req.socket as TaggedSocket;
-      void handleRequest(this.ctx, req, res, s._scheme ?? "http", s._cnTarget);
+      // Resolve the bridge metadata from connMeta here, not in the "connection" handler:
+      // on some platforms (Linux loopback) the server accepts the bridge connection before
+      // the client-side connect callback that records the meta has run, so reading it at
+      // "connection" time races and loses the scheme/target — making a decrypted HTTPS
+      // request look like plain http and get sent in cleartext to a TLS origin. The "request"
+      // event only fires after the bridge has written the head (which happens right after
+      // connMeta.set), so by here the entry is always present.
+      const meta = this.connMeta.get(s.remotePort ?? 0);
+      const scheme = meta?.scheme ?? s._scheme ?? "http";
+      const target = meta?.target ?? s._cnTarget;
+      void handleRequest(this.ctx, req, res, scheme, target);
     });
     this.httpServer.on("clientError", (_e, sock) => (sock as Socket).destroy());
     await listen(this.httpServer, 0, "127.0.0.1");

@@ -67,8 +67,6 @@ export function resetUpstreamPool(): void {
     }
   }
   h2SessionPool.clear();
-  httpAgent.destroy();
-  httpsAgent.destroy();
 }
 
 function buildHeaders(req: CnRequest): http.OutgoingHttpHeaders {
