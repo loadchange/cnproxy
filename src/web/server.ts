@@ -38,7 +38,7 @@ export class WebInspector {
     return this.boundPort;
   }
 
-  start(): void {
+  start(): Promise<void> {
     const host = this.proxy.options.get("webHost");
     const port = this.proxy.options.get("webPort");
     const self = this;
@@ -66,9 +66,15 @@ export class WebInspector {
       });
     });
 
-    this.server.listen(port, host);
-    this.boundPort = port;
-    log.banner(`Web inspector → http://${host}:${port}`);
+    return new Promise((resolve, reject) => {
+      this.server!.once("error", reject);
+      this.server!.listen(port, host, () => {
+        this.server!.removeListener("error", reject);
+        this.boundPort = (this.server!.address() as { port: number }).port;
+        log.banner(`Web inspector → http://${host}:${this.boundPort}`);
+        resolve();
+      });
+    });
   }
 
   stop(): void {
@@ -82,6 +88,58 @@ export class WebInspector {
     this.sockets.clear();
     this.wss?.close();
     this.server?.close();
+  }
+
+  /** Import a Postman collection (v2.1) and replay each request to create flows. */
+  private importPostman(collection: Record<string, unknown>): number {
+    if (!collection || typeof collection !== "object") return 0;
+    const items = (collection.item ?? []) as Array<Record<string, unknown>>;
+    let count = 0;
+    const walk = (entries: Array<Record<string, unknown>>): void => {
+      for (const entry of entries) {
+        // Nested folders contain sub-items
+        const subItems = entry.item as Array<Record<string, unknown>> | undefined;
+        if (Array.isArray(subItems)) {
+          walk(subItems);
+          continue;
+        }
+        const req = entry.request as Record<string, unknown> | undefined;
+        if (!req) continue;
+        const method = (req.method as string ?? "GET").toUpperCase();
+        let rawUrl: string;
+        const urlObj = req.url as Record<string, unknown> | string | undefined;
+        if (typeof urlObj === "object" && urlObj !== null) {
+          rawUrl = [urlObj.protocol, "://", urlObj.host, urlObj.path].flat().filter(Boolean).join("").replace(/^\/\//, (urlObj.protocol as string ?? "https") + "://");
+          // Fallback: construct from raw
+          if (!rawUrl && urlObj.raw) rawUrl = urlObj.raw as string;
+        } else {
+          rawUrl = (urlObj ?? "") as string;
+        }
+        if (!rawUrl) continue;
+        // Ensure scheme
+        if (!/^https?:\/\//i.test(rawUrl)) rawUrl = "https://" + rawUrl;
+
+        const headers: Array<[string, string]> = [];
+        const hdrArr = req.header as Array<Record<string, string>> | undefined;
+        if (Array.isArray(hdrArr)) {
+          for (const h of hdrArr) {
+            if (h.key && h.value) headers.push([h.key, h.value]);
+          }
+        }
+        const body = req.body as Record<string, unknown> | undefined;
+        const bodyText = body?.raw as string ?? "";
+
+        // Compose the request through the proxy engine
+        try {
+          void this.proxy.compose({ method, url: rawUrl, headers, body: bodyText });
+          count++;
+        } catch {
+          // skip invalid requests
+        }
+      }
+    };
+    walk(items);
+    return count;
   }
 
   /** Adapt a Node req/res pair to the Web Request/Response handlers. */
@@ -145,6 +203,68 @@ export class WebInspector {
       });
     }
 
+    // ---- mobile setup page (scan QR from inspector) ----
+    if (pathname === "/setup") {
+      const host = this.proxy.options.get("host") as string;
+      const port = this.boundPort || this.proxy.options.get("webPort") as number;
+      const proxyPort = this.proxy.port;
+      const listenHost = host === "0.0.0.0" || host === "::" ? this.proxy.getLocalIp() || host : host;
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CNProxy Setup</title>
+<style>body{font-family:system-ui,sans-serif;max-width:500px;margin:40px auto;padding:0 20px;color:#333;background:#f5f5f5}
+.card{background:#fff;border-radius:12px;padding:24px;box-shadow:0 2px 8px rgba(0,0,0,.1);margin-bottom:20px}
+h1{font-size:20px;margin:0 0 8px}h2{font-size:16px;margin:20px 0 8px;color:#4ea1ff}
+.config{background:#f0f4f8;border-radius:8px;padding:12px;margin:12px 0;font-family:monospace}
+.config div{display:flex;justify-content:space-between;padding:4px 0}
+.config span{color:#666}.config b{color:#4ea1ff;font-size:16px}
+ol{padding-left:20px;line-height:1.8}code{background:#f0f4f8;padding:2px 6px;border-radius:4px;font-size:14px}
+.step{margin:4px 0}.tip{background:#fff3cd;border-left:3px solid #ffc107;padding:8px 12px;border-radius:4px;font-size:13px;margin:12px 0}
+a{color:#4ea1ff}button{background:#4ea1ff;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:16px;cursor:pointer;margin:8px 4px}
+button:active{opacity:.8}.ca-btn{display:block;width:100%;text-align:center;margin:8px 0}</style></head><body>
+<div class="card"><h1>⚡ CNProxy Mobile Setup</h1><p>Configure your device to use CNProxy as the Wi-Fi proxy.</p>
+<div class="config"><div><span>Server</span><b>${listenHost}</b></div><div><span>Port</span><b>${proxyPort}</b></div></div>
+<a class="ca-btn" href="/ca.crt" download><button>📥 Install CA Certificate</button></a>
+</div>
+<div class="card"><h2>📱 iPhone / iPad</h2><ol>
+<li class="step">Open <strong>Settings → Wi-Fi</strong></li>
+<li class="step">Tap the <strong>⓵</strong> button next to your connected network</li>
+<li class="step">Scroll to <strong>HTTP Proxy</strong> → select <strong>Manual</strong></li>
+<li class="step">Server: <code>${listenHost}</code></li>
+<li class="step">Port: <code>${proxyPort}</code></li>
+<li class="step">Tap <strong>Save</strong></li>
+<li class="step">After connecting, download the CA cert above</li>
+<li class="step">Go to <strong>Settings → General → VPN & Device Management</strong> → Install the profile</li>
+<li class="step">Go to <strong>Settings → General → About → Certificate Trust Settings</strong> → Enable CNProxy Root CA</li>
+</ol></div>
+<div class="card"><h2>🤖 Android</h2><ol>
+<li class="step">Open <strong>Settings → Wi-Fi</strong></li>
+<li class="step">Long-press your network → <strong>Edit network</strong></li>
+<li class="step">Expand <strong>Advanced</strong> → <strong>Proxy → Manual</strong></li>
+<li class="step">Hostname: <code>${listenHost}</code></li>
+<li class="step">Port: <code>${proxyPort}</code></li>
+<li class="step">Save, then download the CA cert above</li>
+<li class="step">Open the downloaded cert → <strong>Settings → Security → Install from storage</strong></li>
+</ol>
+<div class="tip"><strong>Note:</strong> Android 7+ apps don't trust user CAs by default. For debugging specific apps, use <code>networkSecurityConfig</code> or root + Magisk module.</div></div>
+<div class="card"><h2>✅ Verify</h2><p>Visit any website in your mobile browser. Then check the <a href="/">CNProxy Inspector</a> to see captured traffic.</p></div>
+</body></html>`;
+      return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
+    }
+
+    // ---- setup API for programmatic access ----
+    if (pathname === "/api/setup") {
+      const host = this.proxy.options.get("host") as string;
+      const proxyPort = this.proxy.port;
+      const webPort = this.boundPort || this.proxy.options.get("webPort") as number;
+      const listenHost = host === "0.0.0.0" || host === "::" ? this.proxy.getLocalIp() || host : host;
+      return new Response(JSON.stringify({
+        proxyHost: listenHost,
+        proxyPort,
+        webPort,
+        caCertUrl: `http://${listenHost}:${webPort}/ca.crt`,
+        inspectorUrl: `http://${listenHost}:${webPort}/`,
+      }), { headers: { "content-type": "application/json", "access-control-allow-origin": "*" } });
+    }
+
     // ---- REST API ----
     if (pathname.startsWith("/api/")) return this.handleApi(req, url);
 
@@ -175,11 +295,29 @@ export class WebInspector {
       return json({ ok: true, flows: count });
     }
 
+    // Import Postman collection (v2.1)
+    if (pathname === "/api/import/postman") {
+      process.stderr.write(`[server-diag] postman-path: method=${JSON.stringify(req.method)} is-POST=${req.method === "POST"}\n`);
+    }
+    if (pathname === "/api/import/postman" && req.method === "POST") {
+      const collection = await req.json().catch(() => null);
+      const count = this.importPostman(collection);
+      return json({ ok: true, flows: count });
+    }
+
     if (pathname === "/api/flows/replay-batch" && req.method === "POST") {
       const body = (await req.json().catch(() => ({}))) as { ids?: string[] };
       const ids = Array.isArray(body.ids) ? body.ids : [];
       const replayed = await Promise.all(ids.map((id) => this.proxy.replay(id)));
       return json({ ok: true, replayed: replayed.filter(Boolean).length });
+    }
+
+    if (pathname === "/api/flows/delete-batch" && req.method === "POST") {
+      const body = (await req.json().catch(() => ({}))) as { ids?: string[] };
+      const ids = Array.isArray(body.ids) ? body.ids : [];
+      let deleted = 0;
+      for (const id of ids) { if (store.remove(id)) deleted++; }
+      return json({ ok: true, deleted });
     }
 
     // ---- API testing: composer / cURL / workspace ----
@@ -258,7 +396,13 @@ export class WebInspector {
       const flow = store.get(id);
       if (!flow) return json({ error: "not found" }, 404);
 
+      process.stderr.write(`[server-diag] flows/:id method=${JSON.stringify(req.method)} action=${JSON.stringify(action)} id=${id}\n`);
+
       if (!action && req.method === "GET") return json(flow.toDetail());
+      if (!action && req.method === "DELETE") {
+        store.remove(id);
+        return json({ ok: true, id });
+      }
 
       if (action === "code" && req.method === "GET") {
         const lang = (url.searchParams.get("lang") ?? "curl") as CodeLang;
@@ -301,6 +445,7 @@ export class WebInspector {
       }
     }
 
+    process.stderr.write(`[server-diag] UNMATCHED: method=${JSON.stringify(req.method)} pathname=${JSON.stringify(pathname)}\n`);
     return json({ error: "unknown endpoint" }, 404);
   }
 }
@@ -360,11 +505,18 @@ async function nodeReqToWebRequest(req: IncomingMessage, url: URL): Promise<Requ
     for await (const c of req) chunks.push(c as Buffer);
     body = Buffer.concat(chunks);
   }
-  return new Request(url.toString(), {
+  const webReq = new Request(url.toString(), {
     method,
     headers,
     body: (body && body.length ? body : undefined) as BodyInit | undefined,
   });
+  if (webReq.method !== method) {
+    // The undici Request constructor may normalize methods differently across Node.js versions.
+    // Shadow the prototype getter with an own property so handleApi sees the correct value.
+    process.stderr.write(`[nodeReq-diag] method mismatch! node=${JSON.stringify(method)} webReq=${JSON.stringify(webReq.method)} url=${url.pathname}\n`);
+    Object.defineProperty(webReq, "method", { value: method, configurable: true, enumerable: false });
+  }
+  return webReq;
 }
 
 /** Write a Web Response back onto a Node ServerResponse. */
