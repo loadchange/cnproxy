@@ -47,6 +47,16 @@ export class FlowStore extends EventEmitter {
     this.emit("clear");
   }
 
+  /** Remove a single flow by ID. Returns true if found and removed. */
+  remove(id: string): boolean {
+    const idx = this.flows.findIndex((f) => f.id === id);
+    if (idx === -1) return false;
+    this.flows.splice(idx, 1);
+    this.byId.delete(id);
+    this.emit("update", undefined as unknown as Flow);
+    return true;
+  }
+
   private trim(): void {
     while (this.flows.length > this.max) {
       const dropped = this.flows.shift();

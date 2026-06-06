@@ -296,9 +296,6 @@ button:active{opacity:.8}.ca-btn{display:block;width:100%;text-align:center;marg
     }
 
     // Import Postman collection (v2.1)
-    if (pathname === "/api/import/postman") {
-      process.stderr.write(`[server-diag] postman-path: method=${JSON.stringify(req.method)} is-POST=${req.method === "POST"}\n`);
-    }
     if (pathname === "/api/import/postman" && req.method === "POST") {
       const collection = await req.json().catch(() => null);
       const count = this.importPostman(collection);
@@ -396,8 +393,6 @@ button:active{opacity:.8}.ca-btn{display:block;width:100%;text-align:center;marg
       const flow = store.get(id);
       if (!flow) return json({ error: "not found" }, 404);
 
-      process.stderr.write(`[server-diag] flows/:id method=${JSON.stringify(req.method)} action=${JSON.stringify(action)} id=${id}\n`);
-
       if (!action && req.method === "GET") return json(flow.toDetail());
       if (!action && req.method === "DELETE") {
         store.remove(id);
@@ -445,7 +440,6 @@ button:active{opacity:.8}.ca-btn{display:block;width:100%;text-align:center;marg
       }
     }
 
-    process.stderr.write(`[server-diag] UNMATCHED: method=${JSON.stringify(req.method)} pathname=${JSON.stringify(pathname)}\n`);
     return json({ error: "unknown endpoint" }, 404);
   }
 }
@@ -511,9 +505,8 @@ async function nodeReqToWebRequest(req: IncomingMessage, url: URL): Promise<Requ
     body: (body && body.length ? body : undefined) as BodyInit | undefined,
   });
   if (webReq.method !== method) {
-    // The undici Request constructor may normalize methods differently across Node.js versions.
-    // Shadow the prototype getter with an own property so handleApi sees the correct value.
-    process.stderr.write(`[nodeReq-diag] method mismatch! node=${JSON.stringify(method)} webReq=${JSON.stringify(webReq.method)} url=${url.pathname}\n`);
+    // Guard against undici normalizing methods differently across Node.js versions:
+    // shadow the prototype getter with an own property so handleApi sees the correct value.
     Object.defineProperty(webReq, "method", { value: method, configurable: true, enumerable: false });
   }
   return webReq;

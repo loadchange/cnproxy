@@ -168,7 +168,13 @@ export class CertificateAuthority {
       { name: "keyUsage", digitalSignature: true, keyEncipherment: true, critical: true },
       { name: "extKeyUsage", serverAuth: true, clientAuth: true },
       { name: "subjectAltName", altNames },
-      { name: "authorityKeyIdentifier", keyIdentifier: getSki(this.caCert) },
+      // AKI: forge's SKI is a 40-char hex string; AKI expects the decoded 20 bytes.
+      // If we pass the hex string directly, forge encodes each char as its ASCII code → 40 bytes
+      // instead of the correct 20 bytes, breaking the chain on iOS/Chrome.
+      {
+        name: "authorityKeyIdentifier",
+        keyIdentifier: forge.util.hexToBytes(getSki(this.caCert)),
+      },
     ]);
 
     cert.sign(this.caKey, forge.md.sha256.create());
@@ -195,5 +201,8 @@ function makeSerial(): string {
 
 function getSki(cert: forge.pki.Certificate): string {
   const ext = cert.getExtension("subjectKeyIdentifier") as { subjectKeyIdentifier?: string } | undefined;
-  return ext?.subjectKeyIdentifier ?? "";
+  // forge returns SKI as a hex string (uppercase, no colons).
+  // We need to convert it to the binary bytes representation that AKI expects.
+  const hex = ext?.subjectKeyIdentifier ?? "";
+  return hex;
 }

@@ -25,12 +25,14 @@ Usage:
 Options:
   -p, --port <n>        Proxy listen port            (default 8888)
   -w, --web-port <n>    Web inspector port           (default 8889)
+      --web-host <addr> Web inspector listen address  (default: same as --host)
       --host <addr>     Listen address               (default 127.0.0.1)
       --no-decrypt      Tunnel HTTPS without MITM decryption
   -u, --upstream <url>  Chain through an upstream proxy (http://host:port)
       --rules <file>    Load rule file
       --ignore <hosts>  Comma-separated hosts to never decrypt
       --allow <hosts>   Comma-separated allow-list of hosts to decrypt
+      --listen-all       Listen on all interfaces (0.0.0.0) for mobile access
       --no-web          Do not start the web inspector
       --open            Open the inspector in your browser
   -q, --quiet           Errors only
@@ -59,12 +61,14 @@ async function main() {
     options: {
       port: { type: "string", short: "p" },
       "web-port": { type: "string", short: "w" },
+      "web-host": { type: "string" },
       host: { type: "string" },
       "no-decrypt": { type: "boolean", default: false },
       upstream: { type: "string", short: "u" },
       rules: { type: "string" },
       ignore: { type: "string" },
       allow: { type: "string" },
+      "listen-all": { type: "boolean", default: false },
       "no-web": { type: "boolean", default: false },
       open: { type: "boolean", default: false },
       quiet: { type: "boolean", short: "q", default: false },
@@ -92,9 +96,11 @@ async function main() {
 
   const rulesText = values.rules && existsSync(values.rules) ? readFileSync(values.rules, "utf8") : "";
 
+  const host = values["listen-all"] ? "0.0.0.0" : (values.host ?? "127.0.0.1");
   const proxy = new ProxyServer({
-    host: values.host ?? "127.0.0.1",
+    host,
     port: values.port ? parseInt(values.port, 10) : 8888,
+    webHost: values["listen-all"] ? "0.0.0.0" : (values["web-host"] ?? host),
     webPort: values["web-port"] ? parseInt(values["web-port"], 10) : 8889,
     decryptHttps: !values["no-decrypt"],
     upstream: values.upstream ?? null,
@@ -109,7 +115,7 @@ async function main() {
   if (!values["no-web"]) {
     web = new WebInspector(proxy);
     try {
-      web.start();
+      await web.start();
     } catch {
       web = undefined;
       log.debug("Web inspector failed to start");
