@@ -5,6 +5,8 @@
  */
 import { test, expect, beforeAll, afterAll } from "vitest";
 import http from "node:http";
+// `WebSocket` is only a Node global from v21+; import from `ws` so the test runs on Node 20 too.
+import { WebSocket } from "ws";
 import { ProxyServer, WebInspector } from "../src/index.ts";
 import { setLogLevel } from "../src/logger.ts";
 
@@ -144,4 +146,50 @@ test("POST /api/clear empties the store", async () => {
   await fetch(`${API}/api/clear`, { method: "POST" });
   const flows = await (await fetch(`${API}/api/flows`)).json();
   expect(flows.length).toBe(0);
+});
+
+test("DELETE /api/flows/:id removes a single flow", async () => {
+  // Generate a flow
+  await fetch(`http://127.0.0.1:${originPort}/delete-test`, { proxy: PROXY });
+  const before = await (await fetch(`${API}/api/flows`)).json();
+  expect(before.length).toBeGreaterThanOrEqual(1);
+  const id = before.find((f: any) => f.path === "/delete-test").id;
+
+  // Delete it
+  const res = await fetch(`${API}/api/flows/${id}`, { method: "DELETE" });
+  expect(res.status).toBe(200);
+  const body = await res.json();
+  expect(body.ok).toBe(true);
+  expect(body.id).toBe(id);
+
+  // Verify it's gone
+  const after = await (await fetch(`${API}/api/flows`)).json();
+  expect(after.find((f: any) => f.id === id)).toBeUndefined();
+
+  // Delete non-existent → 404
+  const res404 = await fetch(`${API}/api/flows/nonexistent-id`, { method: "DELETE" });
+  expect(res404.status).toBe(404);
+});
+
+test("POST /api/import/postman imports a Postman collection", async () => {
+  const collection = {
+    item: [
+      {
+        request: {
+          method: "GET",
+          url: `http://127.0.0.1:${originPort}/postman-test`,
+          header: [{ key: "X-Postman", value: "yes" }],
+        },
+      },
+    ],
+  };
+  const res = await fetch(`${API}/api/import/postman`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(collection),
+  });
+  expect(res.status).toBe(200);
+  const body = await res.json();
+  expect(body.ok).toBe(true);
+  expect(body.flows).toBeGreaterThanOrEqual(1);
 });

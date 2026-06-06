@@ -19,6 +19,13 @@ import zlib from "node:zlib";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach } from "vitest";
+import { resetUpstreamPool } from "../src/core/upstream.ts";
+
+// The upstream module keeps process-global connection state (ALPN cache, H2 sessions, keep-alive
+// agents). Test files run in one process and reuse ephemeral ports, so a later file can inherit a
+// stale entry pointing at a since-closed origin and hang up. Reset between tests for isolation.
+afterEach(() => resetUpstreamPool());
 
 // Isolate every test run from the developer's real ~/.cnproxy: a fresh temp dataDir
 // means no auto-load of a previous session's flows (which would pollute store.find())

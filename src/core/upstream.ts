@@ -51,6 +51,26 @@ export function sendUpstream(req: CnRequest, cfg: UpstreamConfig, timings?: Timi
   return sendDirect(req, cfg, timings);
 }
 
+/**
+ * Drop all cached upstream connection state: the ALPN-protocol cache, pooled HTTP/2 sessions,
+ * and keep-alive H1 agents. Pointed at a host:port that has since been rebound to a different
+ * server (e.g. an ephemeral port reused between test files), the stale cache/socket would
+ * otherwise hang up. Primarily for test isolation; harmless to call at runtime.
+ */
+export function resetUpstreamPool(): void {
+  originAlpnCache.clear();
+  for (const s of h2SessionPool.values()) {
+    try {
+      s.destroy();
+    } catch {
+      /* already gone */
+    }
+  }
+  h2SessionPool.clear();
+  httpAgent.destroy();
+  httpsAgent.destroy();
+}
+
 function buildHeaders(req: CnRequest): http.OutgoingHttpHeaders {
   const headers: http.OutgoingHttpHeaders = {};
   for (const [k, v] of req.headers.entries()) {
