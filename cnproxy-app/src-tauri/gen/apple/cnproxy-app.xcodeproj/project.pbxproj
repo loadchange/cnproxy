@@ -8,26 +8,58 @@
 
 /* Begin PBXBuildFile section */
 		005CC59880BF20071C282A48 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 14C4F67984265FBF9F3E5F88 /* Assets.xcassets */; };
+		14D80D223127FF7108793935 /* VPNManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CBAA9D2FFDDB4F659C207A8 /* VPNManager.swift */; };
 		27D32D0BAD30D7C7AD7D4B2B /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0D5D41BA1089A98F932CE13B /* CoreGraphics.framework */; };
 		50A0B04E1963E47224786EE1 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = DD5ECB88DDB55FF82DB921CB /* LaunchScreen.storyboard */; };
+		8B209DFECA74E40C211F1227 /* PacketTunnelProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = E23B876AC1E3B738B1942DE9 /* PacketTunnelProvider.swift */; };
 		8E552522807FC1D8C135C68F /* WebKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0F037C38BD35D679D75981DE /* WebKit.framework */; };
 		936182ECDFD7C7758F7792A5 /* assets in Resources */ = {isa = PBXBuildFile; fileRef = EB467920FF39E516606F77EF /* assets */; };
 		975957DAF1B3740AA8DD30B0 /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6709C4D8F02EA4B394765A36 /* MetalKit.framework */; };
 		98EE95B29CA3E93EA3A9B14F /* libapp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 86843008EE357AAB65100FAE /* libapp.a */; };
+		9A14B4F1566BAEAB80103E86 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0AAC9CF0973E9041304AAF01 /* NetworkExtension.framework */; };
 		CE9CDDE57C78AFF2829E77F4 /* main.mm in Sources */ = {isa = PBXBuildFile; fileRef = DA6F6352DD37EDFC368B85A2 /* main.mm */; };
+		D7DC12207FCCE121C08148A8 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0AAC9CF0973E9041304AAF01 /* NetworkExtension.framework */; };
 		DA6DA0353E57BE054191B0D1 /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5FED569E4E74C184FF39678E /* QuartzCore.framework */; };
 		E25C22AF7135C53FF36FFB41 /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BB3FC21E8D3D90976538983D /* Metal.framework */; };
+		E48C4BA0DD244B5489289D4F /* PacketTunnel.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C22234252126C8C1825EAAB1 /* PacketTunnel.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		ED0672539125BD3C3D33548A /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 83E903594BBDF7CBDC50CDDE /* Security.framework */; };
 		F686DB420D321EB73F229D97 /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E7AA4A1533F368AF2379092D /* UIKit.framework */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		425D26C4B7038F70A3D0074E /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 498FADB7E44833D596BFE840 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 8FB608923ACDAAB9CE9D1066;
+			remoteInfo = PacketTunnel;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		DA1999E78A6F3E97B28E1B22 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				E48C4BA0DD244B5489289D4F /* PacketTunnel.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		04CCFD84C9E9F07A2E119274 /* bindings.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bindings.h; sourceTree = "<group>"; };
+		0AAC9CF0973E9041304AAF01 /* NetworkExtension.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = NetworkExtension.framework; path = System/Library/Frameworks/NetworkExtension.framework; sourceTree = SDKROOT; };
 		0D5D41BA1089A98F932CE13B /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
 		0F037C38BD35D679D75981DE /* WebKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WebKit.framework; path = System/Library/Frameworks/WebKit.framework; sourceTree = SDKROOT; };
 		14C4F67984265FBF9F3E5F88 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		3166016D6769F70BDFE3DBE0 /* PacketTunnel.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PacketTunnel.entitlements; sourceTree = "<group>"; };
 		5FED569E4E74C184FF39678E /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
 		6709C4D8F02EA4B394765A36 /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
+		7CBAA9D2FFDDB4F659C207A8 /* VPNManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VPNManager.swift; sourceTree = "<group>"; };
 		8380DDDE836607B598173556 /* libapp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libapp.a; sourceTree = "<group>"; };
 		83E903594BBDF7CBDC50CDDE /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
 		86843008EE357AAB65100FAE /* libapp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libapp.a; sourceTree = "<group>"; };
@@ -36,15 +68,26 @@
 		97905CAB5F7A73198A7266C8 /* lib.rs */ = {isa = PBXFileReference; path = lib.rs; sourceTree = "<group>"; };
 		A3B6DB0A4A387C8DAF3183ED /* cnproxy-app_iOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "cnproxy-app_iOS.entitlements"; sourceTree = "<group>"; };
 		BB3FC21E8D3D90976538983D /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
+		C22234252126C8C1825EAAB1 /* PacketTunnel.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = PacketTunnel.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		D2D38C75E43781DB7A280EB1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		DA6F6352DD37EDFC368B85A2 /* main.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = main.mm; sourceTree = "<group>"; };
 		DD5ECB88DDB55FF82DB921CB /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		DDC5D881CF0F49BE620EB3A6 /* cnproxy-app_iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "cnproxy-app_iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		E23B876AC1E3B738B1942DE9 /* PacketTunnelProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketTunnelProvider.swift; sourceTree = "<group>"; };
 		E7AA4A1533F368AF2379092D /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
 		EB467920FF39E516606F77EF /* assets */ = {isa = PBXFileReference; lastKnownFileType = folder; path = assets; sourceTree = SOURCE_ROOT; };
 		F880F4809DFC2140E106E861 /* libapp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libapp.a; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		25A17794DB65CCEC6A1D0BF0 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D7DC12207FCCE121C08148A8 /* NetworkExtension.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		C6089B44B0EA02F060261197 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -57,6 +100,7 @@
 				ED0672539125BD3C3D33548A /* Security.framework in Frameworks */,
 				F686DB420D321EB73F229D97 /* UIKit.framework in Frameworks */,
 				8E552522807FC1D8C135C68F /* WebKit.framework in Frameworks */,
+				9A14B4F1566BAEAB80103E86 /* NetworkExtension.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -67,6 +111,7 @@
 			isa = PBXGroup;
 			children = (
 				DDC5D881CF0F49BE620EB3A6 /* cnproxy-app_iOS.app */,
+				C22234252126C8C1825EAAB1 /* PacketTunnel.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -86,6 +131,7 @@
 				86843008EE357AAB65100FAE /* libapp.a */,
 				BB3FC21E8D3D90976538983D /* Metal.framework */,
 				6709C4D8F02EA4B394765A36 /* MetalKit.framework */,
+				0AAC9CF0973E9041304AAF01 /* NetworkExtension.framework */,
 				5FED569E4E74C184FF39678E /* QuartzCore.framework */,
 				83E903594BBDF7CBDC50CDDE /* Security.framework */,
 				E7AA4A1533F368AF2379092D /* UIKit.framework */,
@@ -102,6 +148,7 @@
 				DD5ECB88DDB55FF82DB921CB /* LaunchScreen.storyboard */,
 				A9EADD6D9FE72EC0ACB07E9B /* cnproxy-app_iOS */,
 				DB65DAF06A9230724C8E2C5C /* Externals */,
+				D1009B2742BD973D4A717133 /* PacketTunnel */,
 				56E197675E28379C88F8586A /* Sources */,
 				47B20512E48BB4A8311CC094 /* src */,
 				34BFD88CF175C90EFB09D0E7 /* Frameworks */,
@@ -161,6 +208,16 @@
 			path = bindings;
 			sourceTree = "<group>";
 		};
+		D1009B2742BD973D4A717133 /* PacketTunnel */ = {
+			isa = PBXGroup;
+			children = (
+				D2D38C75E43781DB7A280EB1 /* Info.plist */,
+				3166016D6769F70BDFE3DBE0 /* PacketTunnel.entitlements */,
+				E23B876AC1E3B738B1942DE9 /* PacketTunnelProvider.swift */,
+			);
+			path = PacketTunnel;
+			sourceTree = "<group>";
+		};
 		DB65DAF06A9230724C8E2C5C /* Externals */ = {
 			isa = PBXGroup;
 			children = (
@@ -173,12 +230,13 @@
 			isa = PBXGroup;
 			children = (
 				DA6F6352DD37EDFC368B85A2 /* main.mm */,
+				7CBAA9D2FFDDB4F659C207A8 /* VPNManager.swift */,
 				C330F075D38D989794E1D351 /* bindings */,
 			);
 			path = "cnproxy-app";
 			sourceTree = "<group>";
 		};
-		"TEMP_270DDF1F-7EBC-4B25-9F4C-36DA316F9151" /* x86_64 */ = {
+		"TEMP_376140F9-184F-4402-B8B6-A1C9768CE210" /* x86_64 */ = {
 			isa = PBXGroup;
 			children = (
 			);
@@ -188,6 +246,24 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		8FB608923ACDAAB9CE9D1066 /* PacketTunnel */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DD6B072C0C11D9F6771E086E /* Build configuration list for PBXNativeTarget "PacketTunnel" */;
+			buildPhases = (
+				F1D5545BBB4385B26108FDA2 /* Sources */,
+				25A17794DB65CCEC6A1D0BF0 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PacketTunnel;
+			packageProductDependencies = (
+			);
+			productName = PacketTunnel;
+			productReference = C22234252126C8C1825EAAB1 /* PacketTunnel.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		F20C4A3A56459E48C0434BEF /* cnproxy-app_iOS */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = F6F215C1D72A08541E99B398 /* Build configuration list for PBXNativeTarget "cnproxy-app_iOS" */;
@@ -196,10 +272,12 @@
 				3D7A355CD5C4A6B7B037C3BB /* Sources */,
 				AD74AB9CB55437976B431A06 /* Resources */,
 				C6089B44B0EA02F060261197 /* Frameworks */,
+				DA1999E78A6F3E97B28E1B22 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				6F88D26E9B23A403E4F2371B /* PBXTargetDependency */,
 			);
 			name = "cnproxy-app_iOS";
 			packageProductDependencies = (
@@ -217,6 +295,9 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
+					8FB608923ACDAAB9CE9D1066 = {
+						DevelopmentTeam = 2CGR266XD2;
+					};
 					F20C4A3A56459E48C0434BEF = {
 						DevelopmentTeam = 2CGR266XD2;
 					};
@@ -236,6 +317,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
+				8FB608923ACDAAB9CE9D1066 /* PacketTunnel */,
 				F20C4A3A56459E48C0434BEF /* cnproxy-app_iOS */,
 			);
 		};
@@ -283,11 +365,28 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				14D80D223127FF7108793935 /* VPNManager.swift in Sources */,
 				CE9CDDE57C78AFF2829E77F4 /* main.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		F1D5545BBB4385B26108FDA2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8B209DFECA74E40C211F1227 /* PacketTunnelProvider.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		6F88D26E9B23A403E4F2371B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 8FB608923ACDAAB9CE9D1066 /* PacketTunnel */;
+			targetProxy = 425D26C4B7038F70A3D0074E /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		13FFE8E51327377E5FF767D3 /* Release */ = {
@@ -371,12 +470,36 @@
 				"LIBRARY_SEARCH_PATHS[arch=arm64]" = "$(inherited) $(PROJECT_DIR)/Externals/arm64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)";
 				"LIBRARY_SEARCH_PATHS[arch=x86_64]" = "$(inherited) $(PROJECT_DIR)/Externals/x86_64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)";
 				PRODUCT_BUNDLE_IDENTIFIER = com.loadchange.cnproxy;
-				PRODUCT_NAME = "cnproxy-app";
+				PRODUCT_NAME = "CNProxy";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VALID_ARCHS = arm64;
 			};
 			name = Release;
+		};
+		777636C5C2A8FC6642EDEEC8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = (
+					arm64,
+				);
+				CODE_SIGN_ENTITLEMENTS = PacketTunnel/PacketTunnel.entitlements;
+				DEVELOPMENT_TEAM = 2CGR266XD2;
+				ENABLE_BITCODE = NO;
+				INFOPLIST_FILE = PacketTunnel/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "CNProxy Tunnel";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.loadchange.cnproxy.PacketTunnel;
+				PRODUCT_NAME = "cnproxy-app";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
 		};
 		9BE3DBB0873440E3C9FD20AB /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -403,7 +526,7 @@
 				"LIBRARY_SEARCH_PATHS[arch=arm64]" = "$(inherited) $(PROJECT_DIR)/Externals/arm64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)";
 				"LIBRARY_SEARCH_PATHS[arch=x86_64]" = "$(inherited) $(PROJECT_DIR)/Externals/x86_64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)";
 				PRODUCT_BUNDLE_IDENTIFIER = com.loadchange.cnproxy;
-				PRODUCT_NAME = "cnproxy-app";
+				PRODUCT_NAME = "CNProxy";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VALID_ARCHS = arm64;
@@ -473,6 +596,30 @@
 			};
 			name = Debug;
 		};
+		BDCB00CA9BD81FD9474AE6B3 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = (
+					arm64,
+				);
+				CODE_SIGN_ENTITLEMENTS = PacketTunnel/PacketTunnel.entitlements;
+				DEVELOPMENT_TEAM = 2CGR266XD2;
+				ENABLE_BITCODE = NO;
+				INFOPLIST_FILE = PacketTunnel/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "CNProxy Tunnel";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.loadchange.cnproxy.PacketTunnel;
+				PRODUCT_NAME = "cnproxy-app";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -481,6 +628,15 @@
 			buildConfigurations = (
 				A52D010E8855666D998D3EF9 /* Debug */,
 				13FFE8E51327377E5FF767D3 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		DD6B072C0C11D9F6771E086E /* Build configuration list for PBXNativeTarget "PacketTunnel" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				777636C5C2A8FC6642EDEEC8 /* Debug */,
+				BDCB00CA9BD81FD9474AE6B3 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

@@ -12,6 +12,7 @@
       <div class="status" id="status">connecting…</div>
       <input id="filter" class="filter" placeholder="filter: ~m POST &amp; ~u /api  |  example.com" spellcheck="false" />
       <div class="spacer"></div>
+      <span id="flowCount" class="flow-count">0</span>
       <label class="toggle"><input type="checkbox" id="decrypt" /> decrypt HTTPS</label>
       <button id="composeBtn" class="btn primary">Compose</button>
       <button id="rulesBtn" class="btn">Rules</button>
@@ -21,8 +22,11 @@
       <button id="clearBtn" class="btn">Clear</button>
       <label class="btn" for="importHar">Import HAR</label>
       <input id="importHar" type="file" accept=".har,application/json" hidden />
+      <label class="btn" for="importPostman">Import Postman</label>
+      <input id="importPostman" type="file" accept=".json,application/json" hidden />
       <a class="btn" href="/api/export/har" download>Export HAR</a>
       <a class="btn" href="/ca.crt" download>CA cert</a>
+      <button id="mobileSetupBtn" class="btn">📱 Mobile</button>
     </header>
 
     <main class="layout">
@@ -180,6 +184,33 @@ api.example.com reqHeaders://{&quot;x-debug&quot;:&quot;1&quot;}"></textarea>
             <h4>Response Diff</h4>
             <div id="diffResponse" class="diff-pane-content"></div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- iOS VPN Connection Panel -->
+    <div id="vpnPanel" class="vpn-panel" hidden>
+      <div class="vpn-content">
+        <div class="vpn-logo">&#9889;</div>
+        <h1 class="vpn-title">CNProxy</h1>
+        <p class="vpn-subtitle">One-tap VPN proxy for traffic inspection</p>
+        <div class="vpn-server-input">
+          <label>Proxy Server</label>
+          <div class="vpn-input-row">
+            <input id="vpnHost" type="text" placeholder="192.168.1.100" />
+            <span class="vpn-colon">:</span>
+            <input id="vpnPort" type="number" placeholder="8888" class="vpn-port" />
+          </div>
+        </div>
+        <div class="vpn-connect-wrap">
+          <button id="vpnConnectBtn" class="vpn-connect-btn" onclick="toggleVpn()">
+            <span class="vpn-btn-text">Connect</span>
+          </button>
+          <div id="vpnStatus" class="vpn-status">Disconnected</div>
+        </div>
+        <div class="vpn-actions">
+          <button class="btn" onclick="installCaFromServer()">Install CA Certificate</button>
+          <button class="btn" onclick="showVpnGuide()">Setup Guide</button>
         </div>
       </div>
     </div>

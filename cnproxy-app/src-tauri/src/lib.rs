@@ -1,14 +1,18 @@
 use std::sync::Mutex;
+use tauri::{Emitter, Manager, RunEvent};
+#[cfg(desktop)]
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Emitter, Manager, RunEvent,
 };
+#[cfg(desktop)]
 use tauri_plugin_shell::process::CommandEvent;
+#[cfg(desktop)]
 use tauri_plugin_shell::ShellExt;
 
 // ── Shared state ──────────────────────────────────────────────────────────────
 
+#[cfg(desktop)]
 struct SidecarState {
     child: Option<tauri_plugin_shell::process::CommandChild>,
 }
@@ -236,12 +240,91 @@ fn network_services_macos() -> Vec<String> {
     }
 }
 
+// ── iOS VPN management (dlsym-based runtime loading) ─────────────────────────
+
+#[cfg(target_os = "ios")]
+mod vpn_ffi {
+    use std::ffi::CString;
+
+    type CfgFn = unsafe extern "C" fn(*const u8, i32, i32) -> bool;
+    type ConFn = unsafe extern "C" fn() -> bool;
+    type DisFn = unsafe extern "C" fn();
+    type StaFn = unsafe extern "C" fn() -> u8;
+
+    fn lookup(name: &str) -> *mut std::ffi::c_void {
+        let cname = CString::new(name).unwrap();
+        unsafe { libc::dlsym(libc::RTLD_DEFAULT, cname.as_ptr()) }
+    }
+
+    pub fn configure(host: &str, port: u16) -> bool {
+        let ptr = lookup("cnproxy_vpn_configure");
+        if ptr.is_null() { return false; }
+        let f: CfgFn = unsafe { std::mem::transmute(ptr) };
+        unsafe { f(host.as_ptr(), host.len() as i32, port as i32) }
+    }
+
+    pub fn connect() -> bool {
+        let ptr = lookup("cnproxy_vpn_connect");
+        if ptr.is_null() { return false; }
+        let f: ConFn = unsafe { std::mem::transmute(ptr) };
+        unsafe { f() }
+    }
+
+    pub fn disconnect() {
+        let ptr = lookup("cnproxy_vpn_disconnect");
+        if ptr.is_null() { return; }
+        let f: DisFn = unsafe { std::mem::transmute(ptr) };
+        unsafe { f() }
+    }
+
+    pub fn status() -> u8 {
+        let ptr = lookup("cnproxy_vpn_status");
+        if ptr.is_null() { return 0; }
+        let f: StaFn = unsafe { std::mem::transmute(ptr) };
+        unsafe { f() }
+    }
+}
+
+#[tauri::command]
+fn configure_vpn(host: String, port: u16) -> Result<bool, String> {
+    #[cfg(target_os = "ios")]
+    { return Ok(vpn_ffi::configure(&host, port)); }
+    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    { let _ = (host, port); Err("VPN only available on mobile".into()) }
+}
+
+#[tauri::command]
+fn connect_vpn() -> Result<bool, String> {
+    #[cfg(target_os = "ios")]
+    { return Ok(vpn_ffi::connect()); }
+    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    Err("VPN only available on mobile".into())
+}
+
+#[tauri::command]
+fn disconnect_vpn() -> Result<(), String> {
+    #[cfg(target_os = "ios")]
+    vpn_ffi::disconnect();
+    Ok(())
+}
+
+#[tauri::command]
+fn vpn_status() -> u8 {
+    #[cfg(target_os = "ios")]
+    { return vpn_ffi::status(); }
+    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    { 0 }
+}
+
 // ── App entry point ──────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let app = tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
+    let builder = tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init());
+
+    #[cfg(desktop)]
+    let builder = builder
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -253,8 +336,13 @@ pub fn run() {
             let _ = app
                 .get_webview_window("main")
                 .and_then(|w| w.set_focus().ok());
-        }))
-        .manage(Mutex::new(SidecarState { child: None }))
+        }));
+
+    #[cfg(desktop)]
+    let builder = builder
+        .manage(Mutex::new(SidecarState { child: None }));
+
+    let app = builder
         .manage(Mutex::new(ProxyState {
             proxy_port: 0,
             web_port: 0,
@@ -266,11 +354,17 @@ pub fn run() {
             get_ca_cert_path,
             install_ca_cert,
             uninstall_ca_cert,
+            configure_vpn,
+            connect_vpn,
+            disconnect_vpn,
+            vpn_status,
         ])
         .setup(|app| {
             let _handle = app.app_handle().clone();
 
-            // ── System tray ──────────────────────────────────────────────
+            // ── System tray (desktop only) ─────────────────────────────────
+            #[cfg(desktop)]
+            {
             let show_item = MenuItemBuilder::with_id("show", "Show CNProxy").build(app)?;
             let proxy_item = MenuItemBuilder::with_id("toggle_proxy", "Enable System Proxy").build(app)?;
             let ca_item = MenuItemBuilder::with_id("install_ca", "Install CA Certificate").build(app)?;
@@ -329,6 +423,7 @@ pub fn run() {
                     }
                 })
                 .build(app)?;
+            } // end #[cfg(desktop)] tray
 
             // ── Application menu bar ─────────────────────────────────────
             #[cfg(desktop)]
@@ -438,7 +533,9 @@ pub fn run() {
                 });
             }
 
-            // ── Sidecar spawn ────────────────────────────────────────────
+            // ── Sidecar spawn (desktop only — mobile uses VPN to remote proxy) ──
+            #[cfg(desktop)]
+            {
             let handle2 = app.app_handle().clone();
             match app.shell().sidecar("binaries/cnproxy") {
                 Ok(sidecar_cmd) => {
@@ -503,6 +600,7 @@ pub fn run() {
                     eprintln!("[cnproxy] sidecar not available: {}", e);
                 }
             }
+            } // end #[cfg(desktop)] sidecar
 
             Ok(())
         })
@@ -516,7 +614,8 @@ pub fn run() {
             if is_on {
                 let _ = toggle_system_proxy(handle.clone(), handle.state::<Mutex<ProxyState>>());
             }
-            // Kill the sidecar
+            // Kill the sidecar (desktop only)
+            #[cfg(desktop)]
             if let Some(state) = handle.try_state::<Mutex<SidecarState>>() {
                 if let Ok(mut s) = state.lock() {
                     if let Some(child) = s.child.take() {

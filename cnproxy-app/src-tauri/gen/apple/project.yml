@@ -25,6 +25,26 @@ targetTemplates:
     settings:
       groups: [app]
 targets:
+  PacketTunnel:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: PacketTunnel
+    info:
+      path: PacketTunnel/Info.plist
+    entitlements:
+      path: PacketTunnel/PacketTunnel.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.loadchange.cnproxy.PacketTunnel
+        DEVELOPMENT_TEAM: 2CGR266XD2
+        ENABLE_BITCODE: false
+        ARCHS: [arm64]
+        SWIFT_VERSION: 5.0
+        INFOPLIST_KEY_CFBundleDisplayName: CNProxy Tunnel
+      groups: [app]
+    dependencies:
+      - sdk: NetworkExtension.framework
   cnproxy-app_iOS:
     type: application
     platform: iOS
@@ -72,6 +92,7 @@ targets:
         EXCLUDED_ARCHS[sdk=iphoneos*]: x86_64
       groups: [app]
     dependencies:
+      - target: PacketTunnel
       - framework: libapp.a
         embed: false
       - sdk: CoreGraphics.framework
@@ -81,6 +102,7 @@ targets:
       - sdk: Security.framework
       - sdk: UIKit.framework
       - sdk: WebKit.framework
+      - sdk: NetworkExtension.framework
     preBuildScripts:
       - script: |
           export PATH="/opt/homebrew/bin:/usr/local/bin:$HOME/.cargo/bin:$PATH"

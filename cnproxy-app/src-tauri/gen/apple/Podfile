@@ -5,6 +5,10 @@ platform :ios, '14.0'
   # Pods for cnproxy-app_iOS
 end
 
+target 'PacketTunnel' do
+platform :ios, '14.0'
+end
+
 target 'cnproxy-app_macOS' do
 platform :osx, '11.0'
   # Pods for cnproxy-app_macOS
